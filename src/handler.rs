@@ -1,6 +1,7 @@
 use indexmap::IndexMap;
 
 use serenity::async_trait;
+use serenity::builder::CreateApplicationCommandOption;
 use serenity::client::{Context, EventHandler};
 use serenity::model::gateway::Ready;
 use serenity::model::id::GuildId;
@@ -20,6 +21,23 @@ pub struct Handler {
     pub services: IndexMap<String, Service>,
 }
 
+fn create_service_option<'a, I: Iterator<Item = &'a String>>(
+    command: &mut CreateApplicationCommandOption,
+    services: I,
+) {
+    command.create_sub_option(|service_opt| {
+        service_opt
+            .name("service")
+            .description("The service to act on")
+            .kind(ApplicationCommandOptionType::String)
+            .required(true);
+        for service in services {
+            service_opt.add_string_choice(service, service);
+        }
+        service_opt
+    });
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, _: Ready) {
@@ -31,33 +49,15 @@ impl EventHandler for Handler {
                         .name("start")
                         .description("Starts services")
                         .kind(ApplicationCommandOptionType::SubCommand);
-                    start.create_sub_option(|service_opt| {
-                        service_opt
-                            .name("service")
-                            .description("The service to start")
-                            .kind(ApplicationCommandOptionType::String)
-                            .required(true);
-                        for name in self.services.keys() {
-                            service_opt.add_string_choice(name, name);
-                        }
-                        service_opt
-                    })
+                    create_service_option(start, self.services.keys());
+                    start
                 });
                 command.create_option(|stop| {
                     stop.name("stop")
                         .description("Stops services")
                         .kind(ApplicationCommandOptionType::SubCommand);
-                    stop.create_sub_option(|service_opt| {
-                        service_opt
-                            .name("service")
-                            .description("The service to stop")
-                            .kind(ApplicationCommandOptionType::String)
-                            .required(true);
-                        for name in self.services.keys() {
-                            service_opt.add_string_choice(name, name);
-                        }
-                        service_opt
-                    })
+                    create_service_option(stop, self.services.keys());
+                    stop
                 });
                 command
             })
