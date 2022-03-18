@@ -27,7 +27,7 @@ pub struct Config {
 }
 
 fn get_env_var(name: &str) -> String {
-    env::var("APPLICATION_ID").expect(format!("Expected environment variable {}", name).as_str())
+    env::var(name).expect(format!("Expected environment variable {}", name).as_str())
 }
 
 fn get_env_var_u64(name: &str) -> u64 {
