@@ -10,12 +10,23 @@ use serenity::model::interactions::application_command::{
 };
 use serenity::model::interactions::{Interaction, InteractionResponseType};
 
+use std::process::Command;
+
 use crate::config::Service;
 
 #[derive(Debug)]
 enum CommandType {
     Start,
     Stop,
+}
+
+impl CommandType {
+    fn as_systemctl_arg(&self) -> &str {
+        match self {
+            CommandType::Start => "start",
+            CommandType::Stop => "stop",
+        }
+    }
 }
 
 pub struct Handler {
@@ -93,13 +104,23 @@ impl EventHandler for Handler {
                         })
                         .await
                         .unwrap();
-                    // TODO actually do this
-                    println!("systemctl {:?} {}", kind, service.unit);
+                    let output = Command::new("systemctl")
+                        .arg(kind.as_systemctl_arg())
+                        .arg(&service.unit)
+                        .output()
+                        .unwrap();
+                    let out = if output.status.success() {
+                        output.stdout
+                    } else {
+                        output.stderr
+                    };
                     interaction
                         .create_interaction_response(&ctx.http, |response| {
                             response
                                 .kind(InteractionResponseType::ChannelMessageWithSource)
-                                .interaction_response_data(|data| data.content("Done!"))
+                                .interaction_response_data(|data| {
+                                    data.content(String::from_utf8(out).unwrap())
+                                })
                         })
                         .await
                         .unwrap();
