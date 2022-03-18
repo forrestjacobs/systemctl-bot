@@ -5,7 +5,9 @@ use serenity::builder::CreateApplicationCommandOption;
 use serenity::client::{Context, EventHandler};
 use serenity::model::gateway::Ready;
 use serenity::model::id::GuildId;
-use serenity::model::interactions::application_command::ApplicationCommandOptionType;
+use serenity::model::interactions::application_command::{
+    ApplicationCommandInteractionDataOptionValue, ApplicationCommandOptionType,
+};
 use serenity::model::interactions::{Interaction, InteractionResponseType};
 
 use crate::config::Service;
@@ -76,7 +78,12 @@ impl EventHandler for Handler {
             });
             let service = sub_command
                 .and_then(|sub_command| sub_command.options.get(0))
-                .and_then(|opt| self.services.get(&opt.name));
+                .and_then(|option| match &option.resolved {
+                    Some(ApplicationCommandInteractionDataOptionValue::String(value)) => {
+                        self.services.get(value)
+                    }
+                    _ => None,
+                });
 
             match (kind, service) {
                 (Some(kind), Some(service)) => {
