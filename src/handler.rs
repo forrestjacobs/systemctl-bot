@@ -34,21 +34,17 @@ pub struct Handler {
     pub services: IndexMap<String, Service>,
 }
 
-fn create_service_option<'a, I: Iterator<Item = &'a String>>(
+fn setup_service_option<'a, I: Iterator<Item = &'a String>>(
     command: &mut CreateApplicationCommandOption,
     services: I,
-) {
-    command.create_sub_option(|service_opt| {
-        service_opt
-            .name("service")
-            .description("The service to act on")
-            .kind(ApplicationCommandOptionType::String)
-            .required(true);
-        for service in services {
-            service_opt.add_string_choice(service, service);
-        }
-        service_opt
-    });
+) -> &mut CreateApplicationCommandOption {
+    command
+        .name("service")
+        .kind(ApplicationCommandOptionType::String);
+    for service in services {
+        command.add_string_choice(service, service);
+    }
+    command
 }
 
 #[async_trait]
@@ -56,23 +52,30 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, _: Ready) {
         GuildId::set_application_commands(&self.guild_id, &ctx.http, |builder| {
             builder.create_application_command(|command| {
-                command.name("systemctl").description("Controls services");
-                command.create_option(|start| {
-                    start
-                        .name("start")
-                        .description("Starts services")
-                        .kind(ApplicationCommandOptionType::SubCommand);
-                    create_service_option(start, self.services.keys());
-                    start
-                });
-                command.create_option(|stop| {
-                    stop.name("stop")
-                        .description("Stops services")
-                        .kind(ApplicationCommandOptionType::SubCommand);
-                    create_service_option(stop, self.services.keys());
-                    stop
-                });
                 command
+                    .name("systemctl")
+                    .description("Controls services")
+                    .create_option(|start| {
+                        start
+                            .name("start")
+                            .description("Starts services")
+                            .kind(ApplicationCommandOptionType::SubCommand)
+                            .create_sub_option(|opt| {
+                                setup_service_option(opt, self.services.keys())
+                                    .description("The service to start")
+                                    .required(true)
+                            })
+                    })
+                    .create_option(|stop| {
+                        stop.name("stop")
+                            .description("Stops services")
+                            .kind(ApplicationCommandOptionType::SubCommand)
+                            .create_sub_option(|opt| {
+                                setup_service_option(opt, self.services.keys())
+                                    .description("The service to stop")
+                                    .required(true)
+                            })
+                    })
             })
         })
         .await
