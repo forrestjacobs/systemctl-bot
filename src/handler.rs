@@ -107,23 +107,18 @@ impl EventHandler for Handler {
                         })
                         .await
                         .unwrap();
-                    let output = Command::new("systemctl")
+                    let command_result = Command::new("systemctl")
                         .arg(kind.as_systemctl_arg())
                         .arg(&service.unit)
-                        .output()
-                        .unwrap();
-                    let out = if output.status.success() {
-                        output.stdout
-                    } else {
-                        output.stderr
+                        .output();
+                    let response_content = match command_result {
+                        Ok(output) if output.status.success() => String::from_utf8(output.stdout).unwrap(),
+                        Ok(output) => format!("Error: {}", String::from_utf8(output.stderr).unwrap()),
+                        Err(e) => format!("Error: {}", e),
                     };
                     interaction
-                        .create_interaction_response(&ctx.http, |response| {
-                            response
-                                .kind(InteractionResponseType::ChannelMessageWithSource)
-                                .interaction_response_data(|data| {
-                                    data.content(String::from_utf8(out).unwrap())
-                                })
+                        .create_followup_message(&ctx.http, |response| {
+                            response.content(response_content)
                         })
                         .await
                         .unwrap();
