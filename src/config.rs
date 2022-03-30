@@ -32,7 +32,8 @@ pub struct Config {
 pub fn get_config() -> Config {
     // TODO Better error messaging
     // TODO Take path to config file as command line argument
-    let config_toml_string = fs::read_to_string("/etc/systemctl-bot/config.toml").expect("Expected config.toml in /etc/systemctl-bot");
+    let config_toml_string = fs::read_to_string("/etc/systemctl-bot/config.toml")
+        .expect("Expected config.toml in /etc/systemctl-bot");
     let config_toml: ConfigToml = toml::from_str(config_toml_string.as_str()).unwrap();
 
     let mut services = IndexMap::new();
