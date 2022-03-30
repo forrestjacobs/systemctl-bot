@@ -112,7 +112,7 @@ impl EventHandler for Handler {
                         .arg(&service.unit)
                         .output();
                     let response_content = match command_result {
-                        Ok(output) if output.status.success() => String::from_utf8(output.stdout).unwrap(),
+                        Ok(output) if output.status.success() => String::from("Done"),
                         Ok(output) => format!("Error: {}", String::from_utf8(output.stderr).unwrap()),
                         Err(e) => format!("Error: {}", e),
                     };
