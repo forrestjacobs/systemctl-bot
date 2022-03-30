@@ -90,17 +90,18 @@ impl EventHandler for Handler {
                 "stop" => Some(CommandType::Stop),
                 _ => None,
             });
-            let service = sub_command
+            let service_name = sub_command
                 .and_then(|sub_command| sub_command.options.get(0))
                 .and_then(|option| match &option.resolved {
                     Some(ApplicationCommandInteractionDataOptionValue::String(value)) => {
-                        self.services.get(value)
+                        Some(value)
                     }
                     _ => None,
                 });
+            let service = service_name.and_then(|value| self.services.get(value));
 
-            match (kind, service) {
-                (Some(kind), Some(service)) => {
+            match (kind, service_name, service) {
+                (Some(kind), Some(service_name), Some(service)) => {
                     interaction
                         .create_interaction_response(&ctx.http, |response| {
                             response.kind(InteractionResponseType::DeferredChannelMessageWithSource)
@@ -112,7 +113,10 @@ impl EventHandler for Handler {
                         .arg(&service.unit)
                         .output();
                     let response_content = match command_result {
-                        Ok(output) if output.status.success() => String::from("Done"),
+                        Ok(output) if output.status.success() => match kind {
+                            CommandType::Start => format!("Started {}", service_name),
+                            CommandType::Stop => format!("Stopped {}", service_name),
+                        },
                         Ok(output) => {
                             format!("Error: {}", String::from_utf8(output.stderr).unwrap())
                         }
