@@ -14,19 +14,9 @@ use std::process::Command;
 
 use crate::config::Service;
 
-#[derive(Debug)]
 enum CommandType {
     Start,
     Stop,
-}
-
-impl CommandType {
-    fn as_systemctl_arg(&self) -> &str {
-        match self {
-            CommandType::Start => "start",
-            CommandType::Stop => "stop",
-        }
-    }
 }
 
 pub struct Handler {
@@ -109,7 +99,10 @@ impl EventHandler for Handler {
                         .await
                         .unwrap();
                     let command_result = Command::new("systemctl")
-                        .arg(kind.as_systemctl_arg())
+                        .arg(match kind {
+                            CommandType::Start => "start",
+                            CommandType::Stop => "stop",
+                        })
                         .arg(&service.unit)
                         .output();
                     let response_content = match command_result {
