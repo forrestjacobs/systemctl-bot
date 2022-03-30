@@ -1,4 +1,8 @@
-# <img src="./logo.png" height="24px" alt="systemctl-bot logo"> **systemctl-bot**: Control your Linux server from Discord
+<p align="center">
+  <img src="logo.png" width="128" height="128" alt="Logo">
+</p>
+
+# systemctl-bot: Control your Linux server from Discord
 
 systemctl-bot lets you and your friends start and stop a subset of systemd services from Discord.
 
@@ -24,9 +28,9 @@ I wrote this bot because I wanted my friends to be able to log in to my small Mi
 
     ```toml
     # Set these to the values you jotted down before
-    application_id = 00000000
-    guild_id = 00000000
-    discord_token = "00000000.00000000.00000000"
+    application_id = 88888888
+    guild_id = 88888888
+    discord_token = "88888888.88888888.88888888"
 
     # Create a [[services]] section for each unit you want to control from Discord
     [[services]]
