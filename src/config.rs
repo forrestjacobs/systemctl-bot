@@ -18,13 +18,16 @@ struct ConfigToml {
     services: Vec<ServiceToml>,
 }
 
+#[derive(Clone)]
 pub struct Service {
     pub unit: String,
 }
 
+#[derive(Clone)]
 pub struct Config {
     pub application_id: u64,
     pub discord_token: String,
+    pub public_key: String,
     pub guild_id: u64,
     pub services: IndexMap<String, Service>,
 }

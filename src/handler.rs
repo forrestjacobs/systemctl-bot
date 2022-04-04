@@ -1,138 +1,140 @@
-use indexmap::IndexMap;
+use crate::config::{Config, Service};
 
-use serenity::async_trait;
-use serenity::builder::CreateApplicationCommandOption;
-use serenity::client::{Context, EventHandler};
-use serenity::model::gateway::Ready;
-use serenity::model::id::GuildId;
-use serenity::model::interactions::application_command::{
-    ApplicationCommandInteractionDataOptionValue, ApplicationCommandOptionType,
+use rusty_interaction::handler::{HandlerResponse, InteractionHandler};
+use rusty_interaction::slash_command;
+use rusty_interaction::types::application::{
+    ApplicationCommandInteractionData, ApplicationCommandInteractionDataOption,
 };
-use serenity::model::interactions::{Interaction, InteractionResponseType};
+use rusty_interaction::types::interaction::*;
 
 use std::process::Command;
 
-use crate::config::Service;
-
-enum CommandType {
-    Start,
-    Stop,
+pub enum HandleError {
+    MissingData,
+    MissingSubcommand,
+    UnexpectedSubcommand(String),
+    MissingService,
+    UnexpectedService(String),
+    SystemctlError(Option<i32>, String),
+    SystemctlIoError(std::io::Error),
 }
 
-pub struct Handler {
-    pub guild_id: GuildId,
-    pub services: IndexMap<String, Service>,
-}
-
-fn setup_service_option<'a, I: Iterator<Item = &'a String>>(
-    command: &mut CreateApplicationCommandOption,
-    services: I,
-) -> &mut CreateApplicationCommandOption {
-    command
-        .name("service")
-        .kind(ApplicationCommandOptionType::String);
-    for service in services {
-        command.add_string_choice(service, service);
-    }
-    command
-}
-
-#[async_trait]
-impl EventHandler for Handler {
-    async fn ready(&self, ctx: Context, _: Ready) {
-        GuildId::set_application_commands(&self.guild_id, &ctx.http, |builder| {
-            builder.create_application_command(|command| {
-                command
-                    .name("systemctl")
-                    .description("Controls services")
-                    .create_option(|start| {
-                        start
-                            .name("start")
-                            .description("Starts services")
-                            .kind(ApplicationCommandOptionType::SubCommand)
-                            .create_sub_option(|opt| {
-                                setup_service_option(opt, self.services.keys())
-                                    .description("The service to start")
-                                    .required(true)
-                            })
-                    })
-                    .create_option(|stop| {
-                        stop.name("stop")
-                            .description("Stops services")
-                            .kind(ApplicationCommandOptionType::SubCommand)
-                            .create_sub_option(|opt| {
-                                setup_service_option(opt, self.services.keys())
-                                    .description("The service to stop")
-                                    .required(true)
-                            })
-                    })
-            })
-        })
-        .await
-        .unwrap();
-    }
-
-    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        if let Interaction::ApplicationCommand(interaction) = interaction {
-            let sub_command = interaction.data.options.get(0);
-            let kind = sub_command.and_then(|sub_command| match sub_command.name.as_str() {
-                "start" => Some(CommandType::Start),
-                "stop" => Some(CommandType::Stop),
-                _ => None,
-            });
-            let service_name = sub_command
-                .and_then(|sub_command| sub_command.options.get(0))
-                .and_then(|option| match &option.resolved {
-                    Some(ApplicationCommandInteractionDataOptionValue::String(value)) => {
-                        Some(value)
-                    }
-                    _ => None,
-                });
-            let service = service_name.and_then(|value| self.services.get(value));
-
-            match (kind, service_name, service) {
-                (Some(kind), Some(service_name), Some(service)) => {
-                    interaction
-                        .create_interaction_response(&ctx.http, |response| {
-                            response.kind(InteractionResponseType::DeferredChannelMessageWithSource)
-                        })
-                        .await
-                        .unwrap();
-                    let command_result = Command::new("systemctl")
-                        .arg(match kind {
-                            CommandType::Start => "start",
-                            CommandType::Stop => "stop",
-                        })
-                        .arg(&service.unit)
-                        .output();
-                    let response_content = match command_result {
-                        Ok(output) if output.status.success() => match kind {
-                            CommandType::Start => format!("Started {}", service_name),
-                            CommandType::Stop => format!("Stopped {}", service_name),
-                        },
-                        Ok(output) => {
-                            format!("Error: {}", String::from_utf8(output.stderr).unwrap())
-                        }
-                        Err(e) => format!("Error: {}", e),
-                    };
-                    interaction
-                        .create_followup_message(&ctx.http, |response| {
-                            response.content(response_content)
-                        })
-                        .await
-                        .unwrap();
-                }
-                _ => {
-                    interaction
-                        .create_interaction_response(&ctx.http, |response| {
-                            response
-                                .kind(InteractionResponseType::ChannelMessageWithSource)
-                                .interaction_response_data(|data| data.content("Invalid command"))
-                        })
-                        .await
-                        .unwrap();
-                }
+impl HandleError {
+    pub fn to_response_message(&self) -> String {
+        match self {
+            HandleError::SystemctlError(exit_code, stderr) => {
+                format!(
+                    "Error: {}{}",
+                    stderr,
+                    exit_code
+                        .map(|c| format!(" (Exit code {})", c))
+                        .unwrap_or_else(|| String::from(""))
+                )
             }
+            _ => String::from("Unexpected Error"),
         }
+    }
+}
+
+fn map_systemctl_errors(
+    output: Result<std::process::Output, std::io::Error>,
+) -> Result<std::process::Output, HandleError> {
+    let output = output.map_err(|e| HandleError::SystemctlIoError(e))?;
+    if output.status.success() {
+        Ok(output)
+    } else {
+        Err(HandleError::SystemctlError(
+            output.status.code(),
+            String::from_utf8(output.stderr).unwrap(),
+        ))
+    }
+}
+
+fn get_service<'a, 'b>(
+    command: &'a ApplicationCommandInteractionDataOption,
+    option_index: usize,
+    config: &'b Config,
+) -> Result<(&'a String, &'b Service), HandleError> {
+    let service_name = &command
+        .options
+        .as_ref()
+        .ok_or_else(|| HandleError::MissingData)?
+        .get(option_index)
+        .ok_or_else(|| HandleError::MissingService)?
+        .value;
+    let service = config
+        .services
+        .get(service_name)
+        .ok_or_else(|| HandleError::UnexpectedService(String::from(service_name)))?;
+    Ok((service_name, service))
+}
+
+fn start(
+    sub_command: &ApplicationCommandInteractionDataOption,
+    config: &Config,
+    ctx: &Context,
+) -> Result<HandlerResponse, HandleError> {
+    let (service_name, service) = get_service(sub_command, 0, config)?;
+    map_systemctl_errors(
+        Command::new("systemctl")
+            .arg("start")
+            .arg(&service.unit)
+            .output(),
+    )?;
+    Ok(ctx
+        .respond()
+        .message(format!("Started {}", service_name))
+        .finish())
+}
+
+fn stop(
+    sub_command: &ApplicationCommandInteractionDataOption,
+    config: &Config,
+    ctx: &Context,
+) -> Result<HandlerResponse, HandleError> {
+    let (service_name, service) = get_service(sub_command, 0, config)?;
+    map_systemctl_errors(
+        Command::new("systemctl")
+            .arg("stop")
+            .arg(&service.unit)
+            .output(),
+    )?;
+    Ok(ctx
+        .respond()
+        .message(format!("Stopped {}", service_name))
+        .finish())
+}
+
+fn handle_interaction(
+    data: Option<&ApplicationCommandInteractionData>,
+    config: &Config,
+    ctx: &Context,
+) -> Result<HandlerResponse, HandleError> {
+    let sub_command = data
+        .ok_or_else(|| HandleError::MissingData)?
+        .options
+        .as_ref()
+        .ok_or_else(|| HandleError::MissingData)?
+        .get(0)
+        .ok_or_else(|| HandleError::MissingSubcommand)?;
+    match sub_command.name.as_str() {
+        "start" => Ok(start(sub_command, config, ctx)?),
+        "stop" => Ok(stop(sub_command, config, ctx)?),
+        name => Err(HandleError::UnexpectedSubcommand(String::from(name))),
+    }
+}
+
+#[slash_command]
+#[defer]
+pub async fn handle_global_command(
+    handler: &mut InteractionHandler,
+    ctx: Context,
+) -> HandlerResponse {
+    let data = ctx.interaction.data.as_ref();
+    let config = handler.data.get::<Config>().unwrap();
+    match handle_interaction(data, config, &ctx) {
+        Ok(response) => response,
+        // TODO: Log
+        Err(e) => ctx.respond().message(e.to_response_message()).finish(),
     }
 }
