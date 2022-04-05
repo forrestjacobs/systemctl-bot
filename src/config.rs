@@ -14,6 +14,7 @@ struct ServiceToml {
 struct ConfigToml {
     application_id: u64,
     discord_token: String,
+    public_key: String,
     guild_id: u64,
     services: Vec<ServiceToml>,
 }
@@ -47,6 +48,7 @@ pub fn get_config() -> Config {
     Config {
         application_id: config_toml.application_id,
         discord_token: config_toml.discord_token,
+        public_key: config_toml.public_key,
         guild_id: config_toml.guild_id,
         services,
     }

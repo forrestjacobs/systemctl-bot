@@ -1,5 +1,6 @@
 mod config;
 mod handler;
+mod register;
 
 use crate::config::get_config;
 use crate::handler::handle_global_command;
@@ -11,7 +12,7 @@ async fn main() -> std::io::Result<()> {
     let config = get_config();
     let mut handle = InteractionHandler::new(
         config.application_id,
-        config.public_key,
+        &config.public_key,
         Some(&config.discord_token),
     );
     handle.add_global_command("systemctl", handle_global_command);
