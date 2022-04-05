@@ -1,6 +1,5 @@
 mod config;
 mod handler;
-mod register;
 
 use crate::config::get_config;
 use crate::handler::handle_global_command;

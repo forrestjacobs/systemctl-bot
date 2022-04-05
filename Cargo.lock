@@ -2352,8 +2352,10 @@ dependencies = [
  "actix-web",
  "async-std",
  "indexmap",
+ "reqwest",
  "rusty_interaction",
  "serde",
+ "serde_json",
  "toml",
 ]
 
@@ -2479,6 +2481,7 @@ dependencies = [
  "memchr",
  "mio 0.6.23",
  "mio-uds",
+ "num_cpus",
  "pin-project-lite 0.1.12",
  "signal-hook-registry",
  "slab",
