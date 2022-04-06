@@ -3,14 +3,6 @@ name = "systemctl-bot"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "systemctl-bot"
-path = "src/main.rs"
-
-[[bin]]
-name = "register-systemctl-bot"
-path = "src/register.rs"
-
 [dependencies]
 actix-web = "3"
 serde_json = "1.0"
