@@ -11,10 +11,10 @@ async fn main() -> std::io::Result<()> {
     let config = get_config();
     let mut handle = InteractionHandler::new(
         config.application_id,
-        &config.public_key,
+        config.public_key,
         Some(&config.discord_token),
     );
     handle.add_global_command("systemctl", handle_global_command);
-    handle.add_data(config);
+    handle.add_data(config.services);
     handle.run(10443).await
 }

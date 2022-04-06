@@ -1,4 +1,4 @@
-use crate::config::{Config, Service};
+use crate::config::Service;
 
 use rusty_interaction::handler::{HandlerResponse, InteractionHandler};
 use rusty_interaction::slash_command;
@@ -9,7 +9,7 @@ use rusty_interaction::types::interaction::*;
 
 use std::process::Command;
 
-pub enum HandleError {
+enum HandleError {
     MissingData,
     MissingSubcommand,
     UnexpectedSubcommand(String),
@@ -20,7 +20,7 @@ pub enum HandleError {
 }
 
 impl HandleError {
-    pub fn to_response_message(&self) -> String {
+    fn to_response_message(&self) -> String {
         match self {
             HandleError::SystemctlError(exit_code, stderr) => {
                 format!(
@@ -53,7 +53,7 @@ fn map_systemctl_errors(
 fn get_service<'a, 'b>(
     command: &'a ApplicationCommandInteractionDataOption,
     option_index: usize,
-    config: &'b Config,
+    services: &'b Vec<Service>,
 ) -> Result<(&'a String, &'b Service), HandleError> {
     let service_name = &command
         .options
@@ -62,19 +62,19 @@ fn get_service<'a, 'b>(
         .get(option_index)
         .ok_or_else(|| HandleError::MissingService)?
         .value;
-    let service = config
-        .services
-        .get(service_name)
+    let service = services
+        .iter()
+        .find(|service| service.name == *service_name)
         .ok_or_else(|| HandleError::UnexpectedService(String::from(service_name)))?;
     Ok((service_name, service))
 }
 
 fn start(
     sub_command: &ApplicationCommandInteractionDataOption,
-    config: &Config,
+    services: &Vec<Service>,
     ctx: &Context,
 ) -> Result<HandlerResponse, HandleError> {
-    let (service_name, service) = get_service(sub_command, 0, config)?;
+    let (service_name, service) = get_service(sub_command, 0, services)?;
     map_systemctl_errors(
         Command::new("systemctl")
             .arg("start")
@@ -89,10 +89,10 @@ fn start(
 
 fn stop(
     sub_command: &ApplicationCommandInteractionDataOption,
-    config: &Config,
+    services: &Vec<Service>,
     ctx: &Context,
 ) -> Result<HandlerResponse, HandleError> {
-    let (service_name, service) = get_service(sub_command, 0, config)?;
+    let (service_name, service) = get_service(sub_command, 0, services)?;
     map_systemctl_errors(
         Command::new("systemctl")
             .arg("stop")
@@ -107,7 +107,7 @@ fn stop(
 
 fn handle_interaction(
     data: Option<&ApplicationCommandInteractionData>,
-    config: &Config,
+    services: &Vec<Service>,
     ctx: &Context,
 ) -> Result<HandlerResponse, HandleError> {
     let sub_command = data
@@ -118,8 +118,8 @@ fn handle_interaction(
         .get(0)
         .ok_or_else(|| HandleError::MissingSubcommand)?;
     match sub_command.name.as_str() {
-        "start" => Ok(start(sub_command, config, ctx)?),
-        "stop" => Ok(stop(sub_command, config, ctx)?),
+        "start" => Ok(start(sub_command, services, ctx)?),
+        "stop" => Ok(stop(sub_command, services, ctx)?),
         name => Err(HandleError::UnexpectedSubcommand(String::from(name))),
     }
 }
@@ -131,8 +131,8 @@ pub async fn handle_global_command(
     ctx: Context,
 ) -> HandlerResponse {
     let data = ctx.interaction.data.as_ref();
-    let config = handler.data.get::<Config>().unwrap();
-    match handle_interaction(data, config, &ctx) {
+    let services = handler.data.get::<Vec<Service>>().unwrap();
+    match handle_interaction(data, services, &ctx) {
         Ok(response) => response,
         // TODO: Log
         Err(e) => ctx.respond().message(e.to_response_message()).finish(),

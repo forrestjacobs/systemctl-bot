@@ -11,15 +11,13 @@ fn make_command(name: &str, description: &str, options: Vec<Value>) -> Value {
     })
 }
 
-fn make_service_option<'a, I: Iterator<Item = &'a String>>(
-    description: &str,
-    services: I,
-) -> Value {
+fn make_service_option(description: &str, services: &Vec<config::Service>) -> Value {
     let service_vec: Vec<Value> = services
+        .iter()
         .map(|service| {
             json!({
-                "name": service,
-                "value": service,
+                "name": service.name,
+                "value": service.name,
             })
         })
         .collect();
@@ -51,16 +49,13 @@ fn register_commands(
                     "Starts services",
                     vec![make_service_option(
                         "The service to start",
-                        config.services.keys(),
+                        &config.services,
                     )],
                 ),
                 make_command(
                     "stop",
                     "Stops services",
-                    vec![make_service_option(
-                        "The service to stop",
-                        config.services.keys(),
-                    )],
+                    vec![make_service_option("The service to stop", &config.services)],
                 ),
             ],
         ))
@@ -68,12 +63,8 @@ fn register_commands(
 }
 
 fn main() {
-    let config = config::get_config();
-    match register_commands(&config) {
-        Err(e) => {
-            println!("Error: {}", e);
-            std::process::exit(1);
-        }
-        _ => {}
+    if let Err(e) = register_commands(&config::get_config()) {
+        println!("Error: {}", e);
+        std::process::exit(1);
     }
 }
