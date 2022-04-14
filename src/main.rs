@@ -8,8 +8,8 @@ use serenity::model::id::GuildId;
 use crate::config::get_config;
 
 #[tokio::main]
-async fn main() {
-    let config = get_config();
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = get_config()?;
 
     let mut client = Client::builder(config.discord_token)
         .intents(GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES)
@@ -22,4 +22,6 @@ async fn main() {
         .unwrap();
 
     client.start().await.unwrap();
+
+    Ok(())
 }

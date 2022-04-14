@@ -2,7 +2,7 @@ use std::fs;
 
 use indexmap::IndexMap;
 
-use serde::Deserialize;
+use serde::{self, Deserialize, Deserializer};
 
 #[derive(Deserialize)]
 struct ServiceToml {
@@ -10,41 +10,34 @@ struct ServiceToml {
     unit: String,
 }
 
-#[derive(Deserialize)]
-struct ConfigToml {
-    application_id: u64,
-    discord_token: String,
-    guild_id: u64,
-    services: Vec<ServiceToml>,
-}
-
 pub struct Service {
     pub unit: String,
 }
 
+#[derive(Deserialize)]
 pub struct Config {
     pub application_id: u64,
     pub discord_token: String,
     pub guild_id: u64,
+    #[serde(deserialize_with = "deserialize_services")]
     pub services: IndexMap<String, Service>,
 }
 
-pub fn get_config() -> Config {
-    // TODO Better error messaging
-    // TODO Take path to config file as command line argument
-    let config_toml_string = fs::read_to_string("/etc/systemctl-bot/config.toml")
-        .expect("Expected config.toml in /etc/systemctl-bot");
-    let config_toml: ConfigToml = toml::from_str(config_toml_string.as_str()).unwrap();
-
+fn deserialize_services<'de, D>(deserializer: D) -> Result<IndexMap<String, Service>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let original_services: Vec<ServiceToml> = Vec::deserialize(deserializer)?;
     let mut services = IndexMap::new();
-    for service in config_toml.services {
+    for service in original_services {
         services.insert(service.name, Service { unit: service.unit });
     }
+    Ok(services)
+}
 
-    Config {
-        application_id: config_toml.application_id,
-        discord_token: config_toml.discord_token,
-        guild_id: config_toml.guild_id,
-        services,
-    }
+pub fn get_config() -> Result<Config, Box<dyn std::error::Error>> {
+    // TODO Take path to config file as command line argument
+    Ok(toml::from_str(
+        fs::read_to_string("/etc/systemctl-bot/config.toml")?.as_str(),
+    )?)
 }
