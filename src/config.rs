@@ -1,8 +1,6 @@
-use std::fs;
-
 use indexmap::IndexMap;
-
 use serde::{self, Deserialize, Deserializer};
+use std::fs;
 
 #[derive(Deserialize)]
 struct ServiceToml {
