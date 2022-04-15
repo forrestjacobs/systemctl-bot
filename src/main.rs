@@ -1,5 +1,7 @@
+mod command;
 mod config;
 mod handler;
+mod systemctl;
 
 use crate::config::get_config;
 use serenity::client::bridge::gateway::GatewayIntents;

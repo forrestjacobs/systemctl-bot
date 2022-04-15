@@ -1,23 +1,16 @@
+use crate::command::{ServiceEntry, UserCommand};
+use crate::config::Service;
 use indexmap::IndexMap;
-
 use serenity::async_trait;
 use serenity::builder::CreateApplicationCommandOption;
 use serenity::client::{Context, EventHandler};
 use serenity::model::gateway::Ready;
 use serenity::model::id::GuildId;
 use serenity::model::interactions::application_command::{
+    ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
     ApplicationCommandInteractionDataOptionValue, ApplicationCommandOptionType,
 };
 use serenity::model::interactions::{Interaction, InteractionResponseType};
-
-use std::process::Command;
-
-use crate::config::Service;
-
-enum CommandType {
-    Start,
-    Stop,
-}
 
 pub struct Handler {
     pub guild_id: GuildId,
@@ -35,6 +28,36 @@ fn setup_service_option<'a, I: Iterator<Item = &'a String>>(
         command.add_string_choice(service, service);
     }
     command
+}
+
+impl Handler {
+    fn get_service_from_opt(
+        &self,
+        option: &ApplicationCommandInteractionDataOption,
+    ) -> Option<ServiceEntry> {
+        match &option.resolved {
+            Some(ApplicationCommandInteractionDataOptionValue::String(name)) => {
+                Some(ServiceEntry {
+                    name: String::from(name),
+                    value: self.services.get(name)?,
+                })
+            }
+            _ => None,
+        }
+    }
+
+    fn parse_command(&self, interaction: &ApplicationCommandInteraction) -> Option<UserCommand> {
+        let sub_command = interaction.data.options.get(0)?.to_owned();
+        match sub_command.name.as_str() {
+            "start" => Some(UserCommand::Start {
+                service: self.get_service_from_opt(sub_command.options.get(0)?)?,
+            }),
+            "stop" => Some(UserCommand::Stop {
+                service: self.get_service_from_opt(sub_command.options.get(0)?)?,
+            }),
+            _ => None,
+        }
+    }
 }
 
 #[async_trait]
@@ -74,46 +97,17 @@ impl EventHandler for Handler {
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(interaction) = interaction {
-            let sub_command = interaction.data.options.get(0);
-            let kind = sub_command.and_then(|sub_command| match sub_command.name.as_str() {
-                "start" => Some(CommandType::Start),
-                "stop" => Some(CommandType::Stop),
-                _ => None,
-            });
-            let service_name = sub_command
-                .and_then(|sub_command| sub_command.options.get(0))
-                .and_then(|option| match &option.resolved {
-                    Some(ApplicationCommandInteractionDataOptionValue::String(value)) => {
-                        Some(value)
-                    }
-                    _ => None,
-                });
-            let service = service_name.and_then(|value| self.services.get(value));
-
-            match (kind, service_name, service) {
-                (Some(kind), Some(service_name), Some(service)) => {
+            match self.parse_command(&interaction) {
+                Some(command) => {
                     interaction
                         .create_interaction_response(&ctx.http, |response| {
                             response.kind(InteractionResponseType::DeferredChannelMessageWithSource)
                         })
                         .await
                         .unwrap();
-                    let command_result = Command::new("systemctl")
-                        .arg(match kind {
-                            CommandType::Start => "start",
-                            CommandType::Stop => "stop",
-                        })
-                        .arg(&service.unit)
-                        .output();
-                    let response_content = match command_result {
-                        Ok(output) if output.status.success() => match kind {
-                            CommandType::Start => format!("Started {}", service_name),
-                            CommandType::Stop => format!("Stopped {}", service_name),
-                        },
-                        Ok(output) => {
-                            format!("Error: {}", String::from_utf8(output.stderr).unwrap())
-                        }
-                        Err(e) => format!("Error: {}", e),
+                    let response_content = match command.run() {
+                        Ok(value) => value,
+                        Err(value) => value.to_string(),
                     };
                     interaction
                         .create_followup_message(&ctx.http, |response| {
