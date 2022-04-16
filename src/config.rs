@@ -39,11 +39,7 @@ where
     Ok(services)
 }
 
-pub async fn get_config() -> Result<Config, Box<dyn std::error::Error>> {
+pub async fn get_config(path: String) -> Result<Config, Box<dyn std::error::Error>> {
     // TODO Take path to config file as command line argument
-    Ok(toml::from_str(
-        fs::read_to_string("/etc/systemctl-bot/config.toml")
-            .await?
-            .as_str(),
-    )?)
+    Ok(toml::from_str(fs::read_to_string(path).await?.as_str())?)
 }

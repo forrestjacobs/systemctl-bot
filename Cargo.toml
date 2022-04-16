@@ -8,6 +8,10 @@ futures = "0.3"
 indexmap = "1.8"
 toml = "0.5"
 
+[dependencies.clap]
+version = "3.1"
+features = ["derive"]
+
 [dependencies.serde]
 version = "1.0"
 features = ["derive"]
