@@ -1,17 +1,17 @@
+use std::process::Output;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::process::{Command, ExitStatus};
-use std::string::FromUtf8Error;
 
 #[derive(Debug)]
 pub enum SystemctlError {
     IoError(io::Error),
     NonZeroExit {
         status: ExitStatus,
-        stderr: Result<String, FromUtf8Error>,
+        stderr: String,
     },
 }
 
@@ -24,8 +24,6 @@ impl Display for SystemctlError {
                 "systemctl exited with status {}: {}",
                 status,
                 stderr
-                    .as_ref()
-                    .unwrap_or(&String::from("unable to parse stdout"))
             ),
         }
     }
@@ -39,24 +37,31 @@ impl From<io::Error> for SystemctlError {
     }
 }
 
-fn run(command: &mut Command) -> Result<Vec<u8>, SystemctlError> {
-    let output = command.output()?;
-    if output.status.success() {
-        Ok(output.stdout)
-    } else {
-        Err(SystemctlError::NonZeroExit {
+fn to_str(out: Vec<u8>) -> String {
+    String::from_utf8(out).unwrap()
+}
+
+impl From<Output> for SystemctlError {
+    fn from(output: Output) -> Self {
+        SystemctlError::NonZeroExit {
             status: output.status,
-            stderr: String::from_utf8(output.stderr),
-        })
+            stderr: to_str(output.stderr),
+        }
+    }
+}
+
+fn to_nonzero_error_result(output: Output) -> Result<(), SystemctlError> {
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(SystemctlError::from(output))
     }
 }
 
 pub fn start<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
-    run(Command::new("systemctl").arg("start").arg(&unit))?;
-    Ok(())
+    to_nonzero_error_result(Command::new("systemctl").arg("start").arg(&unit).output()?)
 }
 
 pub fn stop<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
-    run(Command::new("systemctl").arg("stop").arg(&unit))?;
-    Ok(())
+    to_nonzero_error_result(Command::new("systemctl").arg("stop").arg(&unit).output()?)
 }
