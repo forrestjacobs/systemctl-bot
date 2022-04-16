@@ -147,7 +147,7 @@ impl EventHandler for Handler {
                     |services| {
                         command.create_option(|sub| {
                             sub.name("status")
-                                .description("Checks a service's status")
+                                .description("Checks services' status")
                                 .kind(ApplicationCommandOptionType::SubCommand)
                                 .create_sub_option(|opt| {
                                     setup_service_option(opt, services)
