@@ -52,6 +52,14 @@ impl Handler {
             "stop" => Some(UserCommand::Stop {
                 service: self.get_service_from_opt(sub_command.options.get(0)?)?,
             }),
+            "status" => {
+                let option = sub_command.options.get(0);
+                let services = match option {
+                    Some(option) => vec![self.get_service_from_opt(option)?],
+                    None => self.services.values().collect(),
+                };
+                Some(UserCommand::Status { services })
+            }
             _ => None,
         }
     }
@@ -84,6 +92,16 @@ impl EventHandler for Handler {
                                 setup_service_option(opt, self.services.keys())
                                     .description("The service to stop")
                                     .required(true)
+                            })
+                    })
+                    .create_option(|status| {
+                        status
+                            .name("status")
+                            .description("Checks a service's status")
+                            .kind(ApplicationCommandOptionType::SubCommand)
+                            .create_sub_option(|opt| {
+                                setup_service_option(opt, self.services.keys())
+                                    .description("The service to check")
                             })
                     })
             })

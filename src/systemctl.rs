@@ -65,3 +65,8 @@ pub fn start<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
 pub fn stop<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
     to_nonzero_error_result(Command::new("systemctl").arg("stop").arg(&unit).output()?)
 }
+
+pub fn status<S: AsRef<OsStr>>(unit: S) -> Result<String, SystemctlError> {
+    let output = Command::new("systemctl").arg("is-active").arg(&unit).output()?;
+    Ok(to_str(output.stdout))
+}
