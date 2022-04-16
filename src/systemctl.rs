@@ -1,30 +1,23 @@
-use std::process::Output;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::io;
-use std::process::{Command, ExitStatus};
+use std::process::{Command, ExitStatus, Output};
 
 #[derive(Debug)]
 pub enum SystemctlError {
     IoError(io::Error),
-    NonZeroExit {
-        status: ExitStatus,
-        stderr: String,
-    },
+    NonZeroExit { status: ExitStatus, stderr: String },
 }
 
 impl Display for SystemctlError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             SystemctlError::IoError(e) => write!(f, "{}", e),
-            SystemctlError::NonZeroExit { status, stderr } => write!(
-                f,
-                "systemctl exited with status {}: {}",
-                status,
-                stderr
-            ),
+            SystemctlError::NonZeroExit { status, stderr } => {
+                write!(f, "systemctl exited with status {}: {}", status, stderr)
+            }
         }
     }
 }
@@ -67,6 +60,9 @@ pub fn stop<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
 }
 
 pub fn status<S: AsRef<OsStr>>(unit: S) -> Result<String, SystemctlError> {
-    let output = Command::new("systemctl").arg("is-active").arg(&unit).output()?;
+    let output = Command::new("systemctl")
+        .arg("is-active")
+        .arg(&unit)
+        .output()?;
     Ok(to_str(output.stdout))
 }

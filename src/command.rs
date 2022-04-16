@@ -62,8 +62,13 @@ impl UserCommand<'_> {
             UserCommand::Status { services } => {
                 let statuses = services
                     .iter()
-                    .map(|service| -> Result<String, SystemctlError> {
-                        Ok(format!("{} status: {}", service.name, status(&service.unit)?))
+                    .map(|service| -> Result<String, UserCommandError> {
+                        ensure_allowed(service, ServicePermission::Status)?;
+                        Ok(format!(
+                            "{} status: {}",
+                            service.name,
+                            status(&service.unit)?
+                        ))
                     })
                     .collect::<Result<Vec<String>, UserCommandError>>()?
                     .join("\n");
