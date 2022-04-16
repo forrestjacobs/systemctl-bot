@@ -3,12 +3,8 @@ use serde::{self, Deserialize, Deserializer};
 use std::fs;
 
 #[derive(Deserialize)]
-struct ServiceToml {
-    name: String,
-    unit: String,
-}
-
 pub struct Service {
+    pub name: String,
     pub unit: String,
 }
 
@@ -25,10 +21,10 @@ fn deserialize_services<'de, D>(deserializer: D) -> Result<IndexMap<String, Serv
 where
     D: Deserializer<'de>,
 {
-    let original_services: Vec<ServiceToml> = Vec::deserialize(deserializer)?;
+    let original_services: Vec<Service> = Vec::deserialize(deserializer)?;
     let mut services = IndexMap::new();
     for service in original_services {
-        services.insert(service.name, Service { unit: service.unit });
+        services.insert(String::from(&service.name), service);
     }
     Ok(services)
 }

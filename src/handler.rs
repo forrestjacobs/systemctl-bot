@@ -1,4 +1,4 @@
-use crate::command::{ServiceEntry, UserCommand};
+use crate::command::UserCommand;
 use crate::config::Service;
 use indexmap::IndexMap;
 use serenity::async_trait;
@@ -34,13 +34,10 @@ impl Handler {
     fn get_service_from_opt(
         &self,
         option: &ApplicationCommandInteractionDataOption,
-    ) -> Option<ServiceEntry> {
+    ) -> Option<&Service> {
         match &option.resolved {
             Some(ApplicationCommandInteractionDataOptionValue::String(name)) => {
-                Some(ServiceEntry {
-                    name: String::from(name),
-                    value: self.services.get(name)?,
-                })
+                self.services.get(name)
             }
             _ => None,
         }
