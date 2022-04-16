@@ -1,5 +1,5 @@
 use crate::config::{Service, ServicePermission};
-use crate::systemctl::{start, status, stop, SystemctlError};
+use crate::systemctl::{restart, start, status, stop, SystemctlError};
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -7,6 +7,7 @@ use std::fmt::{Display, Formatter};
 pub enum UserCommand<'a> {
     Start { service: &'a Service },
     Stop { service: &'a Service },
+    Restart { service: &'a Service },
     Status { services: Vec<&'a Service> },
 }
 
@@ -58,6 +59,12 @@ impl UserCommand<'_> {
                 ensure_allowed(service, ServicePermission::Stop)?;
                 stop(&service.unit)?;
                 Ok(format!("Stopped {}", service.name))
+            }
+            UserCommand::Restart { service } => {
+                ensure_allowed(service, ServicePermission::Stop)?;
+                ensure_allowed(service, ServicePermission::Start)?;
+                restart(&service.unit)?;
+                Ok(format!("Restarted {}", service.name))
             }
             UserCommand::Status { services } => {
                 let statuses = services

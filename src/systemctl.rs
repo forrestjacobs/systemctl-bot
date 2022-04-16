@@ -43,7 +43,8 @@ impl From<Output> for SystemctlError {
     }
 }
 
-fn to_nonzero_error_result(output: Output) -> Result<(), SystemctlError> {
+fn systemctl_do<S: AsRef<OsStr>, T: AsRef<OsStr>>(verb: S, unit: T) -> Result<(), SystemctlError> {
+    let output = Command::new("systemctl").arg(verb).arg(unit).output()?;
     if output.status.success() {
         Ok(())
     } else {
@@ -52,11 +53,15 @@ fn to_nonzero_error_result(output: Output) -> Result<(), SystemctlError> {
 }
 
 pub fn start<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
-    to_nonzero_error_result(Command::new("systemctl").arg("start").arg(&unit).output()?)
+    systemctl_do("start", &unit)
 }
 
 pub fn stop<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
-    to_nonzero_error_result(Command::new("systemctl").arg("stop").arg(&unit).output()?)
+    systemctl_do("stop", &unit)
+}
+
+pub fn restart<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
+    systemctl_do("restart", &unit)
 }
 
 pub fn status<S: AsRef<OsStr>>(unit: S) -> Result<String, SystemctlError> {

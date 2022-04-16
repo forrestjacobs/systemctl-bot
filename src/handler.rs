@@ -68,6 +68,9 @@ impl Handler {
             "stop" => Some(UserCommand::Stop {
                 service: self.get_service_from_opt(sub_command.options.get(0)?)?,
             }),
+            "restart" => Some(UserCommand::Restart {
+                service: self.get_service_from_opt(sub_command.options.get(0)?)?,
+            }),
             "status" => {
                 let option = sub_command.options.get(0);
                 let services = match option {
@@ -116,6 +119,24 @@ impl EventHandler for Handler {
                                 .create_sub_option(|opt| {
                                     setup_service_option(opt, services)
                                         .description("The service to stop")
+                                        .required(true)
+                                })
+                        });
+                    },
+                );
+                self.with_service_names(
+                    |service| {
+                        service.permissions.contains(&ServicePermission::Stop)
+                            && service.permissions.contains(&ServicePermission::Start)
+                    },
+                    |services| {
+                        command.create_option(|sub| {
+                            sub.name("restart")
+                                .description("Restarts services")
+                                .kind(ApplicationCommandOptionType::SubCommand)
+                                .create_sub_option(|opt| {
+                                    setup_service_option(opt, services)
+                                        .description("The service to restart")
                                         .required(true)
                                 })
                         });
