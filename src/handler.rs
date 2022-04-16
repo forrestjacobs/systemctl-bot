@@ -173,7 +173,7 @@ impl EventHandler for Handler {
                         })
                         .await
                         .unwrap();
-                    let response_content = match command.run() {
+                    let response_content = match command.run().await {
                         Ok(value) => value,
                         Err(value) => value.to_string(),
                     };

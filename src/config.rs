@@ -1,7 +1,7 @@
 use indexmap::IndexMap;
 use serde::{self, Deserialize, Deserializer};
 use std::collections::HashSet;
-use std::fs;
+use tokio::fs;
 
 #[derive(Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -39,9 +39,11 @@ where
     Ok(services)
 }
 
-pub fn get_config() -> Result<Config, Box<dyn std::error::Error>> {
+pub async fn get_config() -> Result<Config, Box<dyn std::error::Error>> {
     // TODO Take path to config file as command line argument
     Ok(toml::from_str(
-        fs::read_to_string("/etc/systemctl-bot/config.toml")?.as_str(),
+        fs::read_to_string("/etc/systemctl-bot/config.toml")
+            .await?
+            .as_str(),
     )?)
 }

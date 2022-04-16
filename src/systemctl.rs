@@ -3,7 +3,8 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::io;
-use std::process::{Command, ExitStatus, Output};
+use std::process::{ExitStatus, Output};
+use tokio::process::Command;
 
 #[derive(Debug)]
 pub enum SystemctlError {
@@ -43,8 +44,15 @@ impl From<Output> for SystemctlError {
     }
 }
 
-fn systemctl_do<S: AsRef<OsStr>, T: AsRef<OsStr>>(verb: S, unit: T) -> Result<(), SystemctlError> {
-    let output = Command::new("systemctl").arg(verb).arg(unit).output()?;
+async fn systemctl_do<S: AsRef<OsStr>, T: AsRef<OsStr>>(
+    verb: S,
+    unit: T,
+) -> Result<(), SystemctlError> {
+    let output = Command::new("systemctl")
+        .arg(verb)
+        .arg(unit)
+        .output()
+        .await?;
     if output.status.success() {
         Ok(())
     } else {
@@ -52,22 +60,23 @@ fn systemctl_do<S: AsRef<OsStr>, T: AsRef<OsStr>>(verb: S, unit: T) -> Result<()
     }
 }
 
-pub fn start<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
-    systemctl_do("start", &unit)
+pub async fn start<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
+    systemctl_do("start", &unit).await
 }
 
-pub fn stop<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
-    systemctl_do("stop", &unit)
+pub async fn stop<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
+    systemctl_do("stop", &unit).await
 }
 
-pub fn restart<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
-    systemctl_do("restart", &unit)
+pub async fn restart<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
+    systemctl_do("restart", &unit).await
 }
 
-pub fn status<S: AsRef<OsStr>>(unit: S) -> Result<String, SystemctlError> {
+pub async fn status<S: AsRef<OsStr>>(unit: S) -> Result<String, SystemctlError> {
     let output = Command::new("systemctl")
         .arg("is-active")
         .arg(&unit)
-        .output()?;
+        .output()
+        .await?;
     Ok(to_str(output.stdout))
 }

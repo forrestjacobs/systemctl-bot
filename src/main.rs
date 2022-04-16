@@ -10,7 +10,7 @@ use serenity::model::id::GuildId;
 
 #[tokio::main]
 async fn main() {
-    let config = get_config().unwrap();
+    let config = get_config().await.unwrap();
 
     let mut client = Client::builder(config.discord_token)
         .intents(GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES)

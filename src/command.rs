@@ -1,5 +1,6 @@
 use crate::config::{Service, ServicePermission};
 use crate::systemctl::{restart, start, status, stop, SystemctlError};
+use futures::future::join_all;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -48,36 +49,36 @@ fn ensure_allowed(
 }
 
 impl UserCommand<'_> {
-    pub fn run(&self) -> Result<String, UserCommandError> {
+    pub async fn run(&self) -> Result<String, UserCommandError> {
         match self {
             UserCommand::Start { service } => {
                 ensure_allowed(service, ServicePermission::Start)?;
-                start(&service.unit)?;
+                start(&service.unit).await?;
                 Ok(format!("Started {}", service.name))
             }
             UserCommand::Stop { service } => {
                 ensure_allowed(service, ServicePermission::Stop)?;
-                stop(&service.unit)?;
+                stop(&service.unit).await?;
                 Ok(format!("Stopped {}", service.name))
             }
             UserCommand::Restart { service } => {
                 ensure_allowed(service, ServicePermission::Stop)?;
                 ensure_allowed(service, ServicePermission::Start)?;
-                restart(&service.unit)?;
+                restart(&service.unit).await?;
                 Ok(format!("Restarted {}", service.name))
             }
             UserCommand::Status { services } => {
-                let statuses = services
+                for service in services {
+                    ensure_allowed(service, ServicePermission::Status)?;
+                }
+                let statuses = join_all(services.iter().map(|service| status(&service.unit)))
+                    .await
                     .iter()
-                    .map(|service| -> Result<String, UserCommandError> {
-                        ensure_allowed(service, ServicePermission::Status)?;
-                        Ok(format!(
-                            "{} status: {}",
-                            service.name,
-                            status(&service.unit)?
-                        ))
+                    .zip(services)
+                    .map(|(status, service)| -> Result<String, SystemctlError> {
+                        status.and_then(|status| format!("{} status: {}", &service.name, status))
                     })
-                    .collect::<Result<Vec<String>, UserCommandError>>()?
+                    .collect::<Result<Vec<String>, SystemctlError>>()?
                     .join("\n");
                 Ok(statuses)
             }
