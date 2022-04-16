@@ -1,5 +1,5 @@
 use crate::command::UserCommand;
-use crate::config::Service;
+use crate::config::{Service, ServicePermission};
 use indexmap::IndexMap;
 use serenity::async_trait;
 use serenity::builder::CreateApplicationCommandOption;
@@ -17,10 +17,10 @@ pub struct Handler {
     pub services: IndexMap<String, Service>,
 }
 
-fn setup_service_option<'a, I: Iterator<Item = &'a String>>(
-    command: &mut CreateApplicationCommandOption,
-    services: I,
-) -> &mut CreateApplicationCommandOption {
+fn setup_service_option<'a>(
+    command: &'a mut CreateApplicationCommandOption,
+    services: Vec<&String>,
+) -> &'a mut CreateApplicationCommandOption {
     command
         .name("service")
         .kind(ApplicationCommandOptionType::String);
@@ -31,6 +31,22 @@ fn setup_service_option<'a, I: Iterator<Item = &'a String>>(
 }
 
 impl Handler {
+    fn with_service_names<P: Fn(&Service) -> bool, F: FnOnce(Vec<&String>)>(
+        &self,
+        predicate: P,
+        f: F,
+    ) {
+        if self.services.values().any(&predicate) {
+            let services = self
+                .services
+                .iter()
+                .filter(|(_, service)| predicate(service))
+                .map(|(name, _)| name)
+                .collect::<Vec<&String>>();
+            f(services);
+        }
+    }
+
     fn get_service_from_opt(
         &self,
         option: &ApplicationCommandInteractionDataOption,
@@ -56,7 +72,11 @@ impl Handler {
                 let option = sub_command.options.get(0);
                 let services = match option {
                     Some(option) => vec![self.get_service_from_opt(option)?],
-                    None => self.services.values().collect(),
+                    None => self
+                        .services
+                        .values()
+                        .filter(|s| s.permissions.contains(&ServicePermission::Status))
+                        .collect(),
                 };
                 Some(UserCommand::Status { services })
             }
@@ -70,40 +90,52 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, _: Ready) {
         GuildId::set_application_commands(&self.guild_id, &ctx.http, |builder| {
             builder.create_application_command(|command| {
+                command.name("systemctl").description("Controls services");
+                self.with_service_names(
+                    |service| service.permissions.contains(&ServicePermission::Start),
+                    |services| {
+                        command.create_option(|sub| {
+                            sub.name("start")
+                                .description("Starts services")
+                                .kind(ApplicationCommandOptionType::SubCommand)
+                                .create_sub_option(|opt| {
+                                    setup_service_option(opt, services)
+                                        .description("The service to start")
+                                        .required(true)
+                                })
+                        });
+                    },
+                );
+                self.with_service_names(
+                    |service| service.permissions.contains(&ServicePermission::Stop),
+                    |services| {
+                        command.create_option(|sub| {
+                            sub.name("stop")
+                                .description("Stops services")
+                                .kind(ApplicationCommandOptionType::SubCommand)
+                                .create_sub_option(|opt| {
+                                    setup_service_option(opt, services)
+                                        .description("The service to stop")
+                                        .required(true)
+                                })
+                        });
+                    },
+                );
+                self.with_service_names(
+                    |service| service.permissions.contains(&ServicePermission::Status),
+                    |services| {
+                        command.create_option(|sub| {
+                            sub.name("status")
+                                .description("Checks a service's status")
+                                .kind(ApplicationCommandOptionType::SubCommand)
+                                .create_sub_option(|opt| {
+                                    setup_service_option(opt, services)
+                                        .description("The service to check")
+                                })
+                        });
+                    },
+                );
                 command
-                    .name("systemctl")
-                    .description("Controls services")
-                    .create_option(|start| {
-                        start
-                            .name("start")
-                            .description("Starts services")
-                            .kind(ApplicationCommandOptionType::SubCommand)
-                            .create_sub_option(|opt| {
-                                setup_service_option(opt, self.services.keys())
-                                    .description("The service to start")
-                                    .required(true)
-                            })
-                    })
-                    .create_option(|stop| {
-                        stop.name("stop")
-                            .description("Stops services")
-                            .kind(ApplicationCommandOptionType::SubCommand)
-                            .create_sub_option(|opt| {
-                                setup_service_option(opt, self.services.keys())
-                                    .description("The service to stop")
-                                    .required(true)
-                            })
-                    })
-                    .create_option(|status| {
-                        status
-                            .name("status")
-                            .description("Checks a service's status")
-                            .kind(ApplicationCommandOptionType::SubCommand)
-                            .create_sub_option(|opt| {
-                                setup_service_option(opt, self.services.keys())
-                                    .description("The service to check")
-                            })
-                    })
             })
         })
         .await

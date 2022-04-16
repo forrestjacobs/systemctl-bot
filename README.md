@@ -36,11 +36,13 @@ I wrote this bot because I wanted my friends to be able to log in to my small Mi
     [[services]]
     name = "Minecraft" # How the service will appear in Discord
     unit = "minecraft-java-server.service"
+    permissions = ["start", "stop", "status"]
 
     # You can list as many services as you want. They will appear in the same order in Discord's autocomplete list.
     [[services]]
     name = "Terraria"
     unit = "terraria.service"
+    permissions = ["status"] # only allow status checking
     ```
 
  6. Check out this git repo and [build it using Cargo](https://doc.rust-lang.org/cargo/commands/cargo-build.html):

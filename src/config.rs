@@ -1,11 +1,21 @@
 use indexmap::IndexMap;
 use serde::{self, Deserialize, Deserializer};
+use std::collections::HashSet;
 use std::fs;
+
+#[derive(Deserialize, Hash, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ServicePermission {
+    Start,
+    Stop,
+    Status,
+}
 
 #[derive(Deserialize)]
 pub struct Service {
     pub name: String,
     pub unit: String,
+    pub permissions: HashSet<ServicePermission>,
 }
 
 #[derive(Deserialize)]
