@@ -24,7 +24,7 @@ I wrote this bot because I wanted my friends to be able to log in to my small Mi
 
  4. While you're in the Discord app, right-click on your server icon and select _Copy ID_. This is your _Guild ID_, which will be used in the next step.
 
- 5. On the server you want to control, create `/etc/systemctl-bot/config.toml`:
+ 5. On the server you want to control, create `/etc/systemctl-bot.toml`:
 
     ```toml
     # Set these to the values you jotted down before
