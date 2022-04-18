@@ -71,16 +71,16 @@ impl UserCommand<'_> {
                 for service in services {
                     ensure_allowed(service, ServicePermission::Status)?;
                 }
-                let statuses = join_all(services.iter().map(|service| status(&service.unit)))
-                    .await
+                let statuses = join_all(services.iter().map(|service| status(&service.unit))).await;
+                let response = services
                     .iter()
-                    .zip(services)
-                    .map(|(status, service)| -> Result<String, SystemctlError> {
-                        status.and_then(|status| format!("{} status: {}", &service.name, status))
+                    .zip(statuses)
+                    .map(|(service, status)| -> Result<String, SystemctlError> {
+                        status.map(|status| format!("{} status: {}", &service.name, status))
                     })
                     .collect::<Result<Vec<String>, SystemctlError>>()?
                     .join("\n");
-                Ok(statuses)
+                Ok(response)
             }
         }
     }
