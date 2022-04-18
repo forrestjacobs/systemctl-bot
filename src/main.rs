@@ -10,7 +10,7 @@ use serenity::client::Client;
 use serenity::model::id::GuildId;
 
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
+#[clap(version, about, long_about = None)]
 struct Args {
     #[clap(short, long, default_value = "/etc/systemctl-bot.toml")]
     config: String,
