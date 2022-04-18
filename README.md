@@ -4,7 +4,7 @@
 
 # systemctl-bot: Control your Linux server from Discord
 
-systemctl-bot lets you and your friends start and stop a subset of systemd services from Discord.
+systemctl-bot lets you and your friends start and stop a subset of systemd units from Discord.
 
 🚧 This is still very much a work in progress (both the documentation and the project itself.) As with most hobbyist projects, run this at your own risk.
 
@@ -14,7 +14,7 @@ I wrote this bot because I wanted my friends to be able to log in to my small Mi
 
 ## Setup
 
- 0. Make sure that the services you want to control are already system systemd units that are enabled on your Linux server. Right now, this bot only works with system units (as opposed to [user units](https://wiki.archlinux.org/title/Systemd/User).)
+ 0. Make sure that the services you want to control are already systemd units that are enabled on your Linux server. Right now, this bot only works with system units (as opposed to [user units](https://wiki.archlinux.org/title/Systemd/User).)
 
  1. [Create an application on the Discord Developer Portal](https://discord.com/developers/applications). (Feel free to use [the included logo](./logo.png).) After you've created it, jot down the _Application ID_.
 
@@ -32,16 +32,14 @@ I wrote this bot because I wanted my friends to be able to log in to my small Mi
     guild_id = 88888888
     discord_token = "88888888.88888888.88888888"
 
-    # Create a [[services]] section for each unit you want to control from Discord
-    [[services]]
-    name = "Minecraft" # How the service will appear in Discord
-    unit = "minecraft-java-server.service"
+    # Create a [[units]] section for each unit you want to control from Discord
+    [[units]]
+    name = "minecraft-java-server"
     permissions = ["start", "stop", "status"]
 
-    # You can list as many services as you want. They will appear in the same order in Discord's autocomplete list.
-    [[services]]
-    name = "Terraria"
-    unit = "terraria.service"
+    # You can list as many units as you want. They will appear in the same order in Discord's autocomplete list.
+    [[units]]
+    name = "terraria"
     permissions = ["status"] # only allow status checking
     ```
 
@@ -61,4 +59,4 @@ I wrote this bot because I wanted my friends to be able to log in to my small Mi
     % sudo ./target/release/systemctl-bot
     ```
 
- 8. You can now start and stop services by typing `/systemctl <start|stop> [service name]` in your Discord server!
+ 8. You can now control units by typing `/systemctl <start|stop|restart|status> [unit name]` in your Discord server!

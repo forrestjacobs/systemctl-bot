@@ -26,7 +26,7 @@ async fn main() {
         .intents(GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES)
         .event_handler(handler::Handler {
             guild_id: GuildId(config.guild_id),
-            services: config.services,
+            units: config.units,
         })
         .application_id(config.application_id)
         .await

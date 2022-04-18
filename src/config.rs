@@ -5,17 +5,16 @@ use tokio::fs;
 
 #[derive(Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum ServicePermission {
+pub enum UnitPermission {
     Start,
     Stop,
     Status,
 }
 
 #[derive(Deserialize)]
-pub struct Service {
+pub struct Unit {
     pub name: String,
-    pub unit: String,
-    pub permissions: HashSet<ServicePermission>,
+    pub permissions: HashSet<UnitPermission>,
 }
 
 #[derive(Deserialize)]
@@ -23,20 +22,20 @@ pub struct Config {
     pub application_id: u64,
     pub discord_token: String,
     pub guild_id: u64,
-    #[serde(deserialize_with = "deserialize_services")]
-    pub services: IndexMap<String, Service>,
+    #[serde(deserialize_with = "deserialize_units")]
+    pub units: IndexMap<String, Unit>,
 }
 
-fn deserialize_services<'de, D>(deserializer: D) -> Result<IndexMap<String, Service>, D::Error>
+fn deserialize_units<'de, D>(deserializer: D) -> Result<IndexMap<String, Unit>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let original_services: Vec<Service> = Vec::deserialize(deserializer)?;
-    let mut services = IndexMap::new();
-    for service in original_services {
-        services.insert(String::from(&service.name), service);
+    let original_units: Vec<Unit> = Vec::deserialize(deserializer)?;
+    let mut units = IndexMap::new();
+    for unit in original_units {
+        units.insert(String::from(&unit.name), unit);
     }
-    Ok(services)
+    Ok(units)
 }
 
 pub async fn get_config(path: String) -> Result<Config, Box<dyn std::error::Error>> {

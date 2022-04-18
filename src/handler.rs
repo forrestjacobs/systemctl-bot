@@ -1,5 +1,5 @@
 use crate::command::UserCommand;
-use crate::config::{Service, ServicePermission};
+use crate::config::{Unit, UnitPermission};
 use indexmap::IndexMap;
 use serenity::async_trait;
 use serenity::builder::CreateApplicationCommandOption;
@@ -14,46 +14,39 @@ use serenity::model::interactions::{Interaction, InteractionResponseType};
 
 pub struct Handler {
     pub guild_id: GuildId,
-    pub services: IndexMap<String, Service>,
+    pub units: IndexMap<String, Unit>,
 }
 
-fn setup_service_option<'a>(
+fn setup_unit_option<'a>(
     command: &'a mut CreateApplicationCommandOption,
-    services: Vec<&String>,
+    units: Vec<&String>,
 ) -> &'a mut CreateApplicationCommandOption {
     command
-        .name("service")
+        .name("unit")
         .kind(ApplicationCommandOptionType::String);
-    for service in services {
-        command.add_string_choice(service, service);
+    for unit in units {
+        command.add_string_choice(unit, unit);
     }
     command
 }
 
 impl Handler {
-    fn with_service_names<P: Fn(&Service) -> bool, F: FnOnce(Vec<&String>)>(
-        &self,
-        predicate: P,
-        f: F,
-    ) {
-        if self.services.values().any(&predicate) {
-            let services = self
-                .services
+    fn with_unit_names<P: Fn(&Unit) -> bool, F: FnOnce(Vec<&String>)>(&self, predicate: P, f: F) {
+        if self.units.values().any(&predicate) {
+            let units = self
+                .units
                 .iter()
-                .filter(|(_, service)| predicate(service))
+                .filter(|(_, unit)| predicate(unit))
                 .map(|(name, _)| name)
                 .collect::<Vec<&String>>();
-            f(services);
+            f(units);
         }
     }
 
-    fn get_service_from_opt(
-        &self,
-        option: &ApplicationCommandInteractionDataOption,
-    ) -> Option<&Service> {
+    fn get_unit_from_opt(&self, option: &ApplicationCommandInteractionDataOption) -> Option<&Unit> {
         match &option.resolved {
             Some(ApplicationCommandInteractionDataOptionValue::String(name)) => {
-                self.services.get(name)
+                self.units.get(name)
             }
             _ => None,
         }
@@ -63,25 +56,25 @@ impl Handler {
         let sub_command = interaction.data.options.get(0)?.to_owned();
         match sub_command.name.as_str() {
             "start" => Some(UserCommand::Start {
-                service: self.get_service_from_opt(sub_command.options.get(0)?)?,
+                unit: self.get_unit_from_opt(sub_command.options.get(0)?)?,
             }),
             "stop" => Some(UserCommand::Stop {
-                service: self.get_service_from_opt(sub_command.options.get(0)?)?,
+                unit: self.get_unit_from_opt(sub_command.options.get(0)?)?,
             }),
             "restart" => Some(UserCommand::Restart {
-                service: self.get_service_from_opt(sub_command.options.get(0)?)?,
+                unit: self.get_unit_from_opt(sub_command.options.get(0)?)?,
             }),
             "status" => {
                 let option = sub_command.options.get(0);
-                let services = match option {
-                    Some(option) => vec![self.get_service_from_opt(option)?],
+                let units = match option {
+                    Some(option) => vec![self.get_unit_from_opt(option)?],
                     None => self
-                        .services
+                        .units
                         .values()
-                        .filter(|s| s.permissions.contains(&ServicePermission::Status))
+                        .filter(|unit| unit.permissions.contains(&UnitPermission::Status))
                         .collect(),
                 };
-                Some(UserCommand::Status { services })
+                Some(UserCommand::Status { units })
             }
             _ => None,
         }
@@ -93,65 +86,64 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, _: Ready) {
         GuildId::set_application_commands(&self.guild_id, &ctx.http, |builder| {
             builder.create_application_command(|command| {
-                command.name("systemctl").description("Controls services");
-                self.with_service_names(
-                    |service| service.permissions.contains(&ServicePermission::Start),
-                    |services| {
+                command.name("systemctl").description("Controls units");
+                self.with_unit_names(
+                    |unit| unit.permissions.contains(&UnitPermission::Start),
+                    |units| {
                         command.create_option(|sub| {
                             sub.name("start")
-                                .description("Starts services")
+                                .description("Starts units")
                                 .kind(ApplicationCommandOptionType::SubCommand)
                                 .create_sub_option(|opt| {
-                                    setup_service_option(opt, services)
-                                        .description("The service to start")
+                                    setup_unit_option(opt, units)
+                                        .description("The unit to start")
                                         .required(true)
                                 })
                         });
                     },
                 );
-                self.with_service_names(
-                    |service| service.permissions.contains(&ServicePermission::Stop),
-                    |services| {
+                self.with_unit_names(
+                    |unit| unit.permissions.contains(&UnitPermission::Stop),
+                    |units| {
                         command.create_option(|sub| {
                             sub.name("stop")
-                                .description("Stops services")
+                                .description("Stops units")
                                 .kind(ApplicationCommandOptionType::SubCommand)
                                 .create_sub_option(|opt| {
-                                    setup_service_option(opt, services)
-                                        .description("The service to stop")
+                                    setup_unit_option(opt, units)
+                                        .description("The unit to stop")
                                         .required(true)
                                 })
                         });
                     },
                 );
-                self.with_service_names(
-                    |service| {
-                        service.permissions.contains(&ServicePermission::Stop)
-                            && service.permissions.contains(&ServicePermission::Start)
+                self.with_unit_names(
+                    |unit| {
+                        unit.permissions.contains(&UnitPermission::Stop)
+                            && unit.permissions.contains(&UnitPermission::Start)
                     },
-                    |services| {
+                    |units| {
                         command.create_option(|sub| {
                             sub.name("restart")
-                                .description("Restarts services")
+                                .description("Restarts units")
                                 .kind(ApplicationCommandOptionType::SubCommand)
                                 .create_sub_option(|opt| {
-                                    setup_service_option(opt, services)
-                                        .description("The service to restart")
+                                    setup_unit_option(opt, units)
+                                        .description("The unit to restart")
                                         .required(true)
                                 })
                         });
                     },
                 );
-                self.with_service_names(
-                    |service| service.permissions.contains(&ServicePermission::Status),
-                    |services| {
+                self.with_unit_names(
+                    |unit| unit.permissions.contains(&UnitPermission::Status),
+                    |units| {
                         command.create_option(|sub| {
                             sub.name("status")
-                                .description("Checks services' status")
+                                .description("Checks units' status")
                                 .kind(ApplicationCommandOptionType::SubCommand)
                                 .create_sub_option(|opt| {
-                                    setup_service_option(opt, services)
-                                        .description("The service to check")
+                                    setup_unit_option(opt, units).description("The unit to check")
                                 })
                         });
                     },
