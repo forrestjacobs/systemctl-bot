@@ -17,7 +17,7 @@ impl Display for SystemctlError {
         match self {
             SystemctlError::IoError(e) => write!(f, "{}", e),
             SystemctlError::NonZeroExit { status, stderr } => {
-                write!(f, "systemctl failed with {}\n{}", status, stderr)
+                write!(f, "systemctl failed with {}\n> {}", status, stderr)
             }
         }
     }
