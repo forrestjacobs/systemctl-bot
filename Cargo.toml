@@ -1,6 +1,7 @@
 [package]
 name = "systemctl-bot"
 version = "0.1.0"
+description = "Control your Linux server from Discord"
 edition = "2021"
 
 [dependencies]
