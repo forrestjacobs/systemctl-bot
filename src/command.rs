@@ -76,7 +76,7 @@ impl UserCommand<'_> {
                         status.map(|status| format!("{} status: {}", &unit.name, status))
                     })
                     .collect::<Result<Vec<String>, SystemctlError>>()?
-                    .join("\n");
+                    .join("");
                 Ok(response)
             }
         }
