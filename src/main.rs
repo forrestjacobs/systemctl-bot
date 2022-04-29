@@ -1,3 +1,4 @@
+mod builder;
 mod command;
 mod config;
 mod handler;
