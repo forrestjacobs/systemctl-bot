@@ -1,16 +1,21 @@
 use crate::builder::build_command;
 use crate::command::UserCommand;
 use crate::config::{Unit, UnitPermission};
+use crate::systemctl::{status, ManagerProxy};
+use futures::future::join_all;
+use futures::stream::StreamExt;
+use futures::try_join;
 use indexmap::IndexMap;
 use serenity::async_trait;
 use serenity::client::{Context, EventHandler};
-use serenity::model::gateway::Ready;
+use serenity::model::gateway::{Activity, Ready};
 use serenity::model::id::GuildId;
 use serenity::model::interactions::application_command::{
     ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
     ApplicationCommandInteractionDataOptionValue,
 };
 use serenity::model::interactions::{Interaction, InteractionResponseType};
+use zbus::Connection;
 
 pub struct Handler {
     pub guild_id: GuildId,
@@ -18,6 +23,24 @@ pub struct Handler {
 }
 
 impl Handler {
+    async fn get_current_activity(&self) -> Activity {
+        let statuses = join_all(self.units.keys().map(|unit_name| status(unit_name))).await;
+        let response = self
+            .units
+            .keys()
+            .zip(statuses)
+            .filter(|(_, status)| status.as_ref().map_or(false, |status| status == "active"))
+            .map(|(unit_name, _)| String::from(unit_name))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        Activity::playing(response)
+    }
+
+    async fn update_activity(&self, ctx: &Context) {
+        ctx.set_activity(self.get_current_activity().await).await
+    }
+
     fn get_unit_from_opt(&self, option: &ApplicationCommandInteractionDataOption) -> Option<&Unit> {
         match &option.resolved {
             Some(ApplicationCommandInteractionDataOptionValue::String(name)) => {
@@ -64,6 +87,37 @@ impl EventHandler for Handler {
         })
         .await
         .unwrap();
+
+        let conn = Connection::system().await.unwrap();
+        let client = ManagerProxy::new(&conn).await.unwrap();
+
+        let mut new_job_stream = client.receive_job_new().await.unwrap();
+        let mut removed_job_stream = client.receive_job_removed().await.unwrap();
+
+        self.update_activity(&ctx).await;
+
+        let _ = try_join!(
+            async {
+                while let Some(signal) = new_job_stream.next().await {
+                    let args = signal.args()?;
+                    let unit = args.unit();
+                    if self.units.contains_key(unit) {
+                        self.update_activity(&ctx).await;
+                    }
+                }
+                Ok::<(), zbus::Error>(())
+            },
+            async {
+                while let Some(signal) = removed_job_stream.next().await {
+                    let args = signal.args()?;
+                    let unit = args.unit();
+                    if self.units.contains_key(unit) {
+                        self.update_activity(&ctx).await;
+                    }
+                }
+                Ok::<(), zbus::Error>(())
+            }
+        );
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {

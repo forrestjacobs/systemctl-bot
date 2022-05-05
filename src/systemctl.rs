@@ -5,6 +5,8 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::process::{ExitStatus, Output};
 use tokio::process::Command;
+use zbus::dbus_proxy;
+use zvariant::OwnedObjectPath;
 
 #[derive(Debug)]
 pub enum SystemctlError {
@@ -42,6 +44,25 @@ impl From<Output> for SystemctlError {
             stderr: to_str(output.stderr),
         }
     }
+}
+
+#[dbus_proxy(
+    interface = "org.freedesktop.systemd1.Manager",
+    default_service = "org.freedesktop.systemd1",
+    default_path = "/org/freedesktop/systemd1"
+)]
+trait Manager {
+    #[dbus_proxy(signal)]
+    fn job_new(&self, id: u32, job: OwnedObjectPath, unit: String) -> zbus::Result<()>;
+
+    #[dbus_proxy(signal)]
+    fn job_removed(
+        &self,
+        id: u32,
+        job: OwnedObjectPath,
+        unit: String,
+        result: String,
+    ) -> zbus::Result<()>;
 }
 
 async fn systemctl_do<S: AsRef<OsStr>, T: AsRef<OsStr>>(
