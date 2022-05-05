@@ -13,6 +13,7 @@ pub enum UnitPermission {
 
 #[derive(Deserialize)]
 pub struct Unit {
+    #[serde(deserialize_with = "deserialize_unit_name")]
     pub name: String,
     pub permissions: HashSet<UnitPermission>,
 }
@@ -24,6 +25,17 @@ pub struct Config {
     pub guild_id: u64,
     #[serde(deserialize_with = "deserialize_units")]
     pub units: IndexMap<String, Unit>,
+}
+
+fn deserialize_unit_name<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let mut name: String = String::deserialize(deserializer)?;
+    if !name.contains(".") {
+        name = format!("{}.service", name);
+    }
+    Ok(name)
 }
 
 fn deserialize_units<'de, D>(deserializer: D) -> Result<IndexMap<String, Unit>, D::Error>

@@ -11,7 +11,8 @@ fn setup_unit_option<'a>(
         .name("unit")
         .kind(ApplicationCommandOptionType::String);
     for unit in units {
-        command.add_string_choice(unit, unit);
+        let alias = unit.strip_suffix(".service").unwrap_or(unit);
+        command.add_string_choice(alias, unit);
     }
     command
 }
