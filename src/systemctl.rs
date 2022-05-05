@@ -52,6 +52,8 @@ impl From<Output> for SystemctlError {
     default_path = "/org/freedesktop/systemd1"
 )]
 trait Manager {
+    fn subscribe(&self) -> zbus::Result<()>;
+
     #[dbus_proxy(signal)]
     fn job_new(&self, id: u32, job: OwnedObjectPath, unit: String) -> zbus::Result<()>;
 

@@ -89,7 +89,9 @@ impl EventHandler for Handler {
         .unwrap();
 
         let conn = Connection::system().await.unwrap();
+
         let client = ManagerProxy::new(&conn).await.unwrap();
+        let _ = client.subscribe().await.unwrap();
 
         let mut new_job_stream = client.receive_job_new().await.unwrap();
         let mut removed_job_stream = client.receive_job_removed().await.unwrap();
