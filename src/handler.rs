@@ -21,8 +21,17 @@ pub struct Handler {
 }
 
 impl Handler {
+    fn units_that_allow_status_iter(&self) -> impl Iterator<Item = &Unit> {
+        self.units
+            .values()
+            .filter(|unit| unit.permissions.contains(&UnitPermission::Status))
+    }
+
     async fn update_activity(&self, ctx: &Context) {
-        let unit_names = self.units.keys().map(|key| key.as_str());
+        let unit_names = self
+            .units_that_allow_status_iter()
+            .map(|unit| unit.name.as_str());
+
         let active_units = statuses(unit_names)
             .await
             .into_iter()
@@ -35,6 +44,14 @@ impl Handler {
         } else {
             let activity = Activity::playing(active_units.join(", "));
             ctx.set_activity(activity).await;
+        }
+    }
+
+    async fn update_activity_if_unit_allows_status(&self, ctx: &Context, unit: &str) {
+        if self.units.get(unit).map_or(false, |unit| {
+            unit.permissions.contains(&UnitPermission::Status)
+        }) {
+            self.update_activity(&ctx).await;
         }
     }
 
@@ -63,11 +80,7 @@ impl Handler {
                 let option = sub_command.options.get(0);
                 let units = match option {
                     Some(option) => vec![self.get_unit_from_opt(option)?],
-                    None => self
-                        .units
-                        .values()
-                        .filter(|unit| unit.permissions.contains(&UnitPermission::Status))
-                        .collect(),
+                    None => self.units_that_allow_status_iter().collect(),
                 };
                 Some(UserCommand::Status { units })
             }
@@ -95,21 +108,15 @@ impl EventHandler for Handler {
         let _ = try_join!(
             async {
                 while let Some(signal) = new_job_stream.next().await {
-                    let args = signal.args()?;
-                    let unit = args.unit();
-                    if self.units.contains_key(unit) {
-                        self.update_activity(&ctx).await;
-                    }
+                    self.update_activity_if_unit_allows_status(&ctx, signal.args()?.unit())
+                        .await;
                 }
                 Ok::<(), zbus::Error>(())
             },
             async {
                 while let Some(signal) = removed_job_stream.next().await {
-                    let args = signal.args()?;
-                    let unit = args.unit();
-                    if self.units.contains_key(unit) {
-                        self.update_activity(&ctx).await;
-                    }
+                    self.update_activity_if_unit_allows_status(&ctx, signal.args()?.unit())
+                        .await;
                 }
                 Ok::<(), zbus::Error>(())
             }
