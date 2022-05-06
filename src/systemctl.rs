@@ -6,6 +6,7 @@ use std::io;
 use std::process::{ExitStatus, Output};
 use tokio::process::Command;
 use zbus::dbus_proxy;
+use zbus::Connection;
 use zvariant::OwnedObjectPath;
 
 #[derive(Debug)]
@@ -81,6 +82,13 @@ async fn systemctl_do<S: AsRef<OsStr>, T: AsRef<OsStr>>(
     } else {
         Err(SystemctlError::from(output))
     }
+}
+
+pub async fn subscribe<'a>() -> zbus::Result<ManagerProxy<'a>> {
+    let conn = Connection::system().await?;
+    let client = ManagerProxy::new(&conn).await?;
+    let _ = client.subscribe().await?;
+    Ok(client)
 }
 
 pub async fn start<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {

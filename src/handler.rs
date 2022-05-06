@@ -1,8 +1,8 @@
 use crate::builder::build_command;
 use crate::command::UserCommand;
 use crate::config::{Unit, UnitPermission};
-use crate::systemctl::{status, ManagerProxy};
 use futures::future::join_all;
+use crate::systemctl::{statuses, subscribe};
 use futures::stream::StreamExt;
 use futures::try_join;
 use indexmap::IndexMap;
@@ -15,7 +15,6 @@ use serenity::model::interactions::application_command::{
     ApplicationCommandInteractionDataOptionValue,
 };
 use serenity::model::interactions::{Interaction, InteractionResponseType};
-use zbus::Connection;
 
 pub struct Handler {
     pub guild_id: GuildId,
@@ -88,10 +87,7 @@ impl EventHandler for Handler {
         .await
         .unwrap();
 
-        let conn = Connection::system().await.unwrap();
-
-        let client = ManagerProxy::new(&conn).await.unwrap();
-        let _ = client.subscribe().await.unwrap();
+        let client = subscribe().await.unwrap();
 
         let mut new_job_stream = client.receive_job_new().await.unwrap();
         let mut removed_job_stream = client.receive_job_removed().await.unwrap();
