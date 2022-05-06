@@ -5,7 +5,7 @@ use serenity::model::interactions::application_command::ApplicationCommandOption
 
 fn setup_unit_option<'a>(
     command: &'a mut CreateApplicationCommandOption,
-    units: Vec<&String>,
+    units: Vec<&str>,
 ) -> &'a mut CreateApplicationCommandOption {
     command
         .name("unit")
@@ -17,7 +17,7 @@ fn setup_unit_option<'a>(
     command
 }
 
-fn with_filtered_units<P: Fn(&Unit) -> bool, F: FnOnce(Vec<&String>)>(
+fn with_filtered_units<P: Fn(&Unit) -> bool, F: FnOnce(Vec<&str>)>(
     units: &IndexMap<String, Unit>,
     predicate: P,
     f: F,
@@ -26,8 +26,8 @@ fn with_filtered_units<P: Fn(&Unit) -> bool, F: FnOnce(Vec<&String>)>(
         let units = units
             .iter()
             .filter(|(_, unit)| predicate(unit))
-            .map(|(name, _)| name)
-            .collect::<Vec<&String>>();
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<&str>>();
         f(units);
     }
 }
