@@ -27,9 +27,15 @@ impl Handler {
             .await
             .into_iter()
             .filter(|(_, status)| status.as_ref().map_or(false, |status| status == "active"))
-            .map(|(unit, _)| unit);
-        let activity = Activity::playing(active_units.collect::<Vec<&str>>().join(", "));
-        ctx.set_activity(activity).await;
+            .map(|(unit, _)| unit)
+            .collect::<Vec<&str>>();
+
+        if active_units.is_empty() {
+            ctx.reset_presence().await;
+        } else {
+            let activity = Activity::playing(active_units.join(", "));
+            ctx.set_activity(activity).await;
+        }
     }
 
     fn get_unit_from_opt(&self, option: &ApplicationCommandInteractionDataOption) -> Option<&Unit> {

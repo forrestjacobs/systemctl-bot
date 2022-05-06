@@ -68,13 +68,19 @@ impl UserCommand<'_> {
                     ensure_allowed(unit, UnitPermission::Status)?;
                 }
                 let unit_names = units.iter().map(|unit| unit.name.as_str());
-                let response = statuses(unit_names)
+                let status_lines = statuses(unit_names)
                     .await
                     .into_iter()
                     .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
                     .filter(|(_, status)| status != "inactive")
-                    .map(|(unit, status)| format!("{}: {}", unit, status));
-                Ok(response.collect::<Vec<String>>().join("\n"))
+                    .map(|(unit, status)| format!("{}: {}", unit, status))
+                    .collect::<Vec<String>>();
+                let response = if status_lines.is_empty() {
+                    String::from("Nothing is active")
+                } else {
+                    status_lines.join("\n")
+                };
+                Ok(response)
             }
         }
     }
