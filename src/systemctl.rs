@@ -1,3 +1,4 @@
+use futures::future::join_all;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
@@ -109,5 +110,17 @@ pub async fn status<S: AsRef<OsStr>>(unit: S) -> Result<String, SystemctlError> 
         .arg(&unit)
         .output()
         .await?;
-    Ok(to_str(output.stdout))
+    let output = String::from(to_str(output.stdout).trim_end_matches('\n'));
+    Ok(output)
+}
+
+async fn status_with_name(unit: &str) -> (&str, Result<String, SystemctlError>) {
+    let output = status(unit).await;
+    (unit, output)
+}
+
+pub async fn statuses<'a, I: Iterator<Item = &'a str>>(
+    units: I,
+) -> Vec<(&'a str, Result<String, SystemctlError>)> {
+    join_all(units.map(|unit| status_with_name(unit))).await
 }

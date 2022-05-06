@@ -1,6 +1,5 @@
 use crate::config::{Unit, UnitPermission};
-use crate::systemctl::{restart, start, status, stop, SystemctlError};
-use futures::future::join_all;
+use crate::systemctl::{restart, start, statuses, stop, SystemctlError};
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -68,16 +67,14 @@ impl UserCommand<'_> {
                 for unit in units {
                     ensure_allowed(unit, UnitPermission::Status)?;
                 }
-                let statuses = join_all(units.iter().map(|unit| status(&unit.name))).await;
-                let response = units
-                    .iter()
-                    .zip(statuses)
-                    .map(|(unit, status)| -> Result<String, SystemctlError> {
-                        status.map(|status| format!("{} status: {}", &unit.name, status))
-                    })
-                    .collect::<Result<Vec<String>, SystemctlError>>()?
-                    .join("");
-                Ok(response)
+                let unit_names = units.iter().map(|unit| unit.name.as_str());
+                let response = statuses(unit_names)
+                    .await
+                    .into_iter()
+                    .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
+                    .filter(|(_, status)| status != "inactive")
+                    .map(|(unit, status)| format!("{}: {}", unit, status));
+                Ok(response.collect::<Vec<String>>().join("\n"))
             }
         }
     }

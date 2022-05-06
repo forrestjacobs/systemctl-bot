@@ -1,7 +1,6 @@
 use crate::builder::build_command;
 use crate::command::UserCommand;
 use crate::config::{Unit, UnitPermission};
-use futures::future::join_all;
 use crate::systemctl::{statuses, subscribe};
 use futures::stream::StreamExt;
 use futures::try_join;
@@ -22,22 +21,15 @@ pub struct Handler {
 }
 
 impl Handler {
-    async fn get_current_activity(&self) -> Activity {
-        let statuses = join_all(self.units.keys().map(|unit_name| status(unit_name))).await;
-        let response = self
-            .units
-            .keys()
-            .zip(statuses)
-            .filter(|(_, status)| status.as_ref().map_or(false, |status| status == "active"))
-            .map(|(unit_name, _)| String::from(unit_name))
-            .collect::<Vec<String>>()
-            .join(", ");
-
-        Activity::playing(response)
-    }
-
     async fn update_activity(&self, ctx: &Context) {
-        ctx.set_activity(self.get_current_activity().await).await
+        let unit_names = self.units.keys().map(|key| key.as_str());
+        let active_units = statuses(unit_names)
+            .await
+            .into_iter()
+            .filter(|(_, status)| status.as_ref().map_or(false, |status| status == "active"))
+            .map(|(unit, _)| unit);
+        let activity = Activity::playing(active_units.collect::<Vec<&str>>().join(", "));
+        ctx.set_activity(activity).await;
     }
 
     fn get_unit_from_opt(&self, option: &ApplicationCommandInteractionDataOption) -> Option<&Unit> {
