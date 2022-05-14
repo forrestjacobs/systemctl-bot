@@ -26,10 +26,10 @@ default-features = false
 features = ["cache", "client", "gateway", "model", "rustls_backend", "unstable_discord_api"]
 
 [dependencies.tokio]
-version = "1.0"
+version = "1.18"
 features = ["process", "rt-multi-thread"]
 
 [dependencies.zbus]
-version = "2.1"
+version = "2.2"
 default-features = false
 features = ["tokio"]

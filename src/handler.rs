@@ -2,6 +2,7 @@ use crate::builder::build_command;
 use crate::command::UserCommand;
 use crate::config::{Unit, UnitPermission};
 use crate::systemctl::{get_active_state_by_unit_stream, statuses};
+use futures::StreamExt;
 use indexmap::IndexMap;
 use serenity::async_trait;
 use serenity::client::{Context, EventHandler};
@@ -12,7 +13,6 @@ use serenity::model::interactions::application_command::{
     ApplicationCommandInteractionDataOptionValue,
 };
 use serenity::model::interactions::{Interaction, InteractionResponseType};
-use tokio_stream::StreamExt;
 
 pub struct Handler {
     pub guild_id: GuildId,
