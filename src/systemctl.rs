@@ -53,7 +53,7 @@ impl From<Output> for SystemctlError {
 )]
 trait Manager {
     #[dbus_proxy(object = "Unit")]
-    fn get_unit(&self, name: &str);
+    fn load_unit(&self, name: &str);
 }
 
 #[dbus_proxy(
@@ -105,14 +105,14 @@ impl SystemctlManager<'_> {
     }
 
     pub async fn status(&self, unit: &str) -> zbus::Result<String> {
-        let unit = self.client.get_unit(unit).await?;
+        let unit = self.client.load_unit(unit).await?;
         unit.active_state().await
     }
 
     pub async fn status_stream(&self, unit: &str) -> zbus::Result<PropertyStream<'_, String>> {
         Ok(self
             .client
-            .get_unit(unit)
+            .load_unit(unit)
             .await?
             .receive_active_state_changed()
             .await)
