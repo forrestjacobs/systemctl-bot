@@ -8,7 +8,8 @@ pub enum UserCommand<'a> {
     Start { unit: &'a Unit },
     Stop { unit: &'a Unit },
     Restart { unit: &'a Unit },
-    Status { units: Vec<&'a Unit> },
+    SingleStatus { unit: &'a Unit },
+    MultiStatus { units: Vec<&'a Unit> },
 }
 
 #[derive(Debug)]
@@ -66,7 +67,11 @@ impl UserCommand<'_> {
                 systemctl.restart(&unit.name).await?;
                 Ok(format!("Restarted {}", unit.name))
             }
-            UserCommand::Status { units } => {
+            UserCommand::SingleStatus { unit } => {
+                ensure_allowed(unit, UnitPermission::Status)?;
+                Ok(systemctl.status(unit.name.as_str()).await?)
+            }
+            UserCommand::MultiStatus { units } => {
                 for unit in units {
                     ensure_allowed(unit, UnitPermission::Status)?;
                 }

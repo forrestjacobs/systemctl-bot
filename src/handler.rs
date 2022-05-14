@@ -100,11 +100,14 @@ impl Handler<'_> {
             }),
             "status" => {
                 let option = sub_command.options.get(0);
-                let units = match option {
-                    Some(option) => vec![self.get_unit_from_opt(option)?],
-                    None => self.units_that_allow_status_iter().collect(),
-                };
-                Some(UserCommand::Status { units })
+                Some(match option {
+                    Some(option) => UserCommand::SingleStatus {
+                        unit: self.get_unit_from_opt(option)?,
+                    },
+                    None => UserCommand::MultiStatus {
+                        units: self.units_that_allow_status_iter().collect(),
+                    },
+                })
             }
             _ => None,
         }
