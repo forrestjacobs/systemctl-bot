@@ -1,5 +1,5 @@
 use crate::config::{Unit, UnitPermission};
-use crate::systemctl::{restart, start, statuses, stop, SystemctlError};
+use crate::systemctl::{statuses, SystemctlError, SystemctlManager};
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -45,31 +45,34 @@ fn ensure_allowed(unit: &Unit, permission: UnitPermission) -> Result<(), UserCom
 }
 
 impl UserCommand<'_> {
-    pub async fn run(&self) -> Result<String, UserCommandError> {
+    pub async fn run<'a>(
+        &self,
+        systemctl: &SystemctlManager<'a>,
+    ) -> Result<String, UserCommandError> {
         match self {
             UserCommand::Start { unit } => {
                 ensure_allowed(unit, UnitPermission::Start)?;
-                start(&unit.name).await?;
+                systemctl.start(&unit.name).await?;
                 Ok(format!("Started {}", unit.name))
             }
             UserCommand::Stop { unit } => {
                 ensure_allowed(unit, UnitPermission::Stop)?;
-                stop(&unit.name).await?;
+                systemctl.stop(&unit.name).await?;
                 Ok(format!("Stopped {}", unit.name))
             }
             UserCommand::Restart { unit } => {
                 ensure_allowed(unit, UnitPermission::Stop)?;
                 ensure_allowed(unit, UnitPermission::Start)?;
-                restart(&unit.name).await?;
+                systemctl.restart(&unit.name).await?;
                 Ok(format!("Restarted {}", unit.name))
             }
             UserCommand::Status { units } => {
                 for unit in units {
                     ensure_allowed(unit, UnitPermission::Status)?;
                 }
-                let unit_names = units.iter().map(|unit| unit.name.as_str());
-                let status_lines = statuses(unit_names)
-                    .await
+
+                let statuses = statuses(systemctl, units.iter().map(|u| u.name.as_str())).await;
+                let status_lines = statuses
                     .into_iter()
                     .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
                     .filter(|(_, status)| status != "inactive")

@@ -6,6 +6,7 @@ mod systemctl;
 
 use crate::config::get_config;
 use clap::Parser;
+use handler::Handler;
 use serenity::client::Client;
 use serenity::model::gateway::GatewayIntents;
 use serenity::model::id::GuildId;
@@ -23,14 +24,15 @@ async fn main() {
 
     let config = get_config(args.config).await.unwrap();
 
+    let handler = Handler::new(GuildId(config.guild_id), config.units)
+        .await
+        .unwrap();
+
     let mut client = Client::builder(
         config.discord_token,
         GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
     )
-    .event_handler(handler::Handler {
-        guild_id: GuildId(config.guild_id),
-        units: config.units,
-    })
+    .event_handler(handler)
     .application_id(config.application_id)
     .await
     .unwrap();

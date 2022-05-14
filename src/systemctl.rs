@@ -6,7 +6,6 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::process::{ExitStatus, Output};
 use tokio::process::Command;
-use tokio_stream::StreamMap;
 use zbus::{dbus_proxy, Connection, PropertyStream};
 
 #[derive(Debug)]
@@ -54,7 +53,7 @@ impl From<Output> for SystemctlError {
 )]
 trait Manager {
     #[dbus_proxy(object = "Unit")]
-    fn get_unit(&self, name: String);
+    fn get_unit(&self, name: &str);
 }
 
 #[dbus_proxy(
@@ -82,64 +81,55 @@ async fn systemctl_do<S: AsRef<OsStr>, T: AsRef<OsStr>>(
     }
 }
 
-pub async fn get_manager<'a>() -> zbus::Result<ManagerProxy<'a>> {
-    let conn = Connection::system().await?;
-    let client = ManagerProxy::new(&conn).await?;
-    Ok(client)
+pub struct SystemctlManager<'a> {
+    client: ManagerProxy<'a>,
 }
 
-pub async fn start<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
-    systemctl_do("start", &unit).await
+impl SystemctlManager<'_> {
+    pub async fn new<'a>() -> zbus::Result<SystemctlManager<'a>> {
+        let conn = Connection::system().await?;
+        let client = ManagerProxy::new(&conn).await?;
+        Ok(SystemctlManager { client })
+    }
+
+    pub async fn start<S: AsRef<OsStr>>(&self, unit: S) -> Result<(), SystemctlError> {
+        systemctl_do("start", &unit).await
+    }
+
+    pub async fn stop<S: AsRef<OsStr>>(&self, unit: S) -> Result<(), SystemctlError> {
+        systemctl_do("stop", &unit).await
+    }
+
+    pub async fn restart<S: AsRef<OsStr>>(&self, unit: S) -> Result<(), SystemctlError> {
+        systemctl_do("restart", &unit).await
+    }
+
+    pub async fn status(&self, unit: &str) -> zbus::Result<String> {
+        let unit = self.client.get_unit(unit).await?;
+        unit.active_state().await
+    }
+
+    pub async fn status_stream(&self, unit: &str) -> zbus::Result<PropertyStream<'_, String>> {
+        Ok(self
+            .client
+            .get_unit(unit)
+            .await?
+            .receive_active_state_changed()
+            .await)
+    }
 }
 
-pub async fn stop<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
-    systemctl_do("stop", &unit).await
+async fn status_with_name<'a, 'b>(
+    systemctl: &SystemctlManager<'a>,
+    unit: &'b str,
+) -> (&'b str, zbus::Result<String>) {
+    (unit, systemctl.status(unit).await)
 }
 
-pub async fn restart<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
-    systemctl_do("restart", &unit).await
-}
-
-pub async fn status<S: AsRef<OsStr>>(unit: S) -> Result<String, SystemctlError> {
-    let output = Command::new("systemctl")
-        .arg("is-active")
-        .arg(&unit)
-        .output()
-        .await?;
-    let output = String::from(to_str(output.stdout).trim_end_matches('\n'));
-    Ok(output)
-}
-
-async fn status_with_name(unit: &str) -> (&str, Result<String, SystemctlError>) {
-    let output = status(unit).await;
-    (unit, output)
-}
-
-pub async fn statuses<'a, I: Iterator<Item = &'a str>>(
+pub async fn statuses<'a, 'b, I: Iterator<Item = &'b str>>(
+    systemctl: &SystemctlManager<'a>,
     units: I,
-) -> Vec<(&'a str, Result<String, SystemctlError>)> {
-    join_all(units.map(|unit| status_with_name(unit))).await
-}
-
-async fn get_active_state_stream<'a, 'b>(
-    manager: &ManagerProxy<'a>,
-    unit_name: &'b str,
-) -> zbus::Result<(&'b str, PropertyStream<'a, String>)> {
-    let unit = manager.get_unit(String::from(unit_name)).await?;
-    let stream = unit.receive_active_state_changed().await;
-    Ok((unit_name, stream))
-}
-
-pub async fn get_active_state_by_unit_stream<'a>(
-    unit_names: Vec<&str>,
-) -> zbus::Result<StreamMap<&str, PropertyStream<'a, String>>> {
-    let manager = get_manager().await?;
-    Ok(join_all(
-        unit_names
-            .into_iter()
-            .map(|unit_name| get_active_state_stream(&manager, unit_name)),
-    )
-    .await
-    .into_iter()
-    .collect::<zbus::Result<StreamMap<&str, PropertyStream<String>>>>()?)
+) -> Vec<(&'b str, zbus::Result<String>)> {
+    let statuses = units.map(|unit| status_with_name(systemctl, unit));
+    join_all(statuses).await
 }

@@ -1,7 +1,8 @@
 use crate::builder::build_command;
 use crate::command::UserCommand;
 use crate::config::{Unit, UnitPermission};
-use crate::systemctl::{get_active_state_by_unit_stream, statuses};
+use crate::systemctl::{statuses, SystemctlManager};
+use futures::future::join_all;
 use futures::StreamExt;
 use indexmap::IndexMap;
 use serenity::async_trait;
@@ -13,26 +14,56 @@ use serenity::model::interactions::application_command::{
     ApplicationCommandInteractionDataOptionValue,
 };
 use serenity::model::interactions::{Interaction, InteractionResponseType};
+use tokio_stream::StreamMap;
+use zbus::PropertyStream;
 
-pub struct Handler {
+pub struct Handler<'a> {
     pub guild_id: GuildId,
     pub units: IndexMap<String, Unit>,
+    systemctl: SystemctlManager<'a>,
 }
 
-impl Handler {
+impl Handler<'_> {
+    pub async fn new<'a>(
+        guild_id: GuildId,
+        units: IndexMap<String, Unit>,
+    ) -> zbus::Result<Handler<'a>> {
+        Ok(Handler {
+            guild_id,
+            units,
+            systemctl: SystemctlManager::new().await?,
+        })
+    }
+
     fn units_that_allow_status_iter(&self) -> impl Iterator<Item = &Unit> {
         self.units
             .values()
             .filter(|unit| unit.permissions.contains(&UnitPermission::Status))
     }
 
+    async fn update_activity_stream(
+        &self,
+    ) -> zbus::Result<StreamMap<&str, PropertyStream<'_, String>>> {
+        let streams = self
+            .units_that_allow_status_iter()
+            .map(|unit| self.systemctl.status_stream(unit.name.as_str()));
+        let streams = join_all(streams)
+            .await
+            .into_iter()
+            .collect::<zbus::Result<Vec<PropertyStream<String>>>>()?;
+        Ok(self
+            .units_that_allow_status_iter()
+            .map(|unit| unit.name.as_str())
+            .zip(streams)
+            .collect::<StreamMap<&str, PropertyStream<String>>>())
+    }
+
     async fn update_activity(&self, ctx: &Context) {
-        let unit_names = self
+        let units = self
             .units_that_allow_status_iter()
             .map(|unit| unit.name.as_str());
-
-        let active_units = statuses(unit_names)
-            .await
+        let statuses = statuses(&self.systemctl, units).await;
+        let active_units = statuses
             .into_iter()
             .filter(|(_, status)| status.as_ref().map_or(false, |status| status == "active"))
             .map(|(unit, _)| unit)
@@ -81,7 +112,7 @@ impl Handler {
 }
 
 #[async_trait]
-impl EventHandler for Handler {
+impl EventHandler for Handler<'_> {
     async fn ready(&self, ctx: Context, _: Ready) {
         GuildId::set_application_commands(&self.guild_id, &ctx.http, |builder| {
             builder.create_application_command(|command| build_command(&self.units, command))
@@ -89,17 +120,9 @@ impl EventHandler for Handler {
         .await
         .unwrap();
 
-        let mut active_state_stream = get_active_state_by_unit_stream(
-            self.units_that_allow_status_iter()
-                .map(|unit| unit.name.as_str())
-                .collect::<Vec<&str>>(),
-        )
-        .await
-        .unwrap();
-
+        let mut stream = self.update_activity_stream().await.unwrap();
         self.update_activity(&ctx).await;
-
-        while let Some(_) = active_state_stream.next().await {
+        while let Some(_) = stream.next().await {
             self.update_activity(&ctx).await;
         }
     }
@@ -114,7 +137,7 @@ impl EventHandler for Handler {
                         })
                         .await
                         .unwrap();
-                    let response_content = match command.run().await {
+                    let response_content = match command.run(&self.systemctl).await {
                         Ok(value) => value,
                         Err(value) => value.to_string(),
                     };
