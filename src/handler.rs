@@ -1,9 +1,7 @@
 use crate::builder::build_command;
 use crate::command::UserCommand;
 use crate::config::{Unit, UnitPermission};
-use crate::systemctl::{statuses, subscribe};
-use futures::stream::StreamExt;
-use futures::try_join;
+use crate::systemctl::{get_active_state_by_unit_stream, statuses};
 use indexmap::IndexMap;
 use serenity::async_trait;
 use serenity::client::{Context, EventHandler};
@@ -14,6 +12,7 @@ use serenity::model::interactions::application_command::{
     ApplicationCommandInteractionDataOptionValue,
 };
 use serenity::model::interactions::{Interaction, InteractionResponseType};
+use tokio_stream::StreamExt;
 
 pub struct Handler {
     pub guild_id: GuildId,
@@ -44,14 +43,6 @@ impl Handler {
         } else {
             let activity = Activity::playing(active_units.join(", "));
             ctx.set_activity(activity).await;
-        }
-    }
-
-    async fn update_activity_if_unit_allows_status(&self, ctx: &Context, unit: &str) {
-        if self.units.get(unit).map_or(false, |unit| {
-            unit.permissions.contains(&UnitPermission::Status)
-        }) {
-            self.update_activity(&ctx).await;
         }
     }
 
@@ -98,29 +89,19 @@ impl EventHandler for Handler {
         .await
         .unwrap();
 
-        let client = subscribe().await.unwrap();
-
-        let mut new_job_stream = client.receive_job_new().await.unwrap();
-        let mut removed_job_stream = client.receive_job_removed().await.unwrap();
+        let mut active_state_stream = get_active_state_by_unit_stream(
+            self.units_that_allow_status_iter()
+                .map(|unit| unit.name.as_str())
+                .collect::<Vec<&str>>(),
+        )
+        .await
+        .unwrap();
 
         self.update_activity(&ctx).await;
 
-        let _ = try_join!(
-            async {
-                while let Some(signal) = new_job_stream.next().await {
-                    self.update_activity_if_unit_allows_status(&ctx, signal.args()?.unit())
-                        .await;
-                }
-                Ok::<(), zbus::Error>(())
-            },
-            async {
-                while let Some(signal) = removed_job_stream.next().await {
-                    self.update_activity_if_unit_allows_status(&ctx, signal.args()?.unit())
-                        .await;
-                }
-                Ok::<(), zbus::Error>(())
-            }
-        );
+        while let Some(_) = active_state_stream.next().await {
+            self.update_activity(&ctx).await;
+        }
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {

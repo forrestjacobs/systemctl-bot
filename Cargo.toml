@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 futures = "0.3"
 indexmap = "1.8"
+tokio-stream = "0.1"
 toml = "0.5"
 zvariant = "3.2"
 

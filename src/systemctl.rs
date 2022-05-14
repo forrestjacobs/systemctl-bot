@@ -6,9 +6,8 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::process::{ExitStatus, Output};
 use tokio::process::Command;
-use zbus::dbus_proxy;
-use zbus::Connection;
-use zvariant::OwnedObjectPath;
+use tokio_stream::StreamMap;
+use zbus::{dbus_proxy, Connection, PropertyStream};
 
 #[derive(Debug)]
 pub enum SystemctlError {
@@ -54,19 +53,17 @@ impl From<Output> for SystemctlError {
     default_path = "/org/freedesktop/systemd1"
 )]
 trait Manager {
-    fn subscribe(&self) -> zbus::Result<()>;
+    #[dbus_proxy(object = "Unit")]
+    fn get_unit(&self, name: String);
+}
 
-    #[dbus_proxy(signal)]
-    fn job_new(&self, id: u32, job: OwnedObjectPath, unit: String) -> zbus::Result<()>;
-
-    #[dbus_proxy(signal)]
-    fn job_removed(
-        &self,
-        id: u32,
-        job: OwnedObjectPath,
-        unit: String,
-        result: String,
-    ) -> zbus::Result<()>;
+#[dbus_proxy(
+    interface = "org.freedesktop.systemd1.Unit",
+    default_service = "org.freedesktop.systemd1"
+)]
+trait Unit {
+    #[dbus_proxy(property)]
+    fn active_state(&self) -> zbus::Result<String>;
 }
 
 async fn systemctl_do<S: AsRef<OsStr>, T: AsRef<OsStr>>(
@@ -85,10 +82,9 @@ async fn systemctl_do<S: AsRef<OsStr>, T: AsRef<OsStr>>(
     }
 }
 
-pub async fn subscribe<'a>() -> zbus::Result<ManagerProxy<'a>> {
+pub async fn get_manager<'a>() -> zbus::Result<ManagerProxy<'a>> {
     let conn = Connection::system().await?;
     let client = ManagerProxy::new(&conn).await?;
-    let _ = client.subscribe().await?;
     Ok(client)
 }
 
@@ -123,4 +119,27 @@ pub async fn statuses<'a, I: Iterator<Item = &'a str>>(
     units: I,
 ) -> Vec<(&'a str, Result<String, SystemctlError>)> {
     join_all(units.map(|unit| status_with_name(unit))).await
+}
+
+async fn get_active_state_stream<'a, 'b>(
+    manager: &ManagerProxy<'a>,
+    unit_name: &'b str,
+) -> zbus::Result<(&'b str, PropertyStream<'a, String>)> {
+    let unit = manager.get_unit(String::from(unit_name)).await?;
+    let stream = unit.receive_active_state_changed().await;
+    Ok((unit_name, stream))
+}
+
+pub async fn get_active_state_by_unit_stream<'a>(
+    unit_names: Vec<&str>,
+) -> zbus::Result<StreamMap<&str, PropertyStream<'a, String>>> {
+    let manager = get_manager().await?;
+    Ok(join_all(
+        unit_names
+            .into_iter()
+            .map(|unit_name| get_active_state_stream(&manager, unit_name)),
+    )
+    .await
+    .into_iter()
+    .collect::<zbus::Result<StreamMap<&str, PropertyStream<String>>>>()?)
 }
