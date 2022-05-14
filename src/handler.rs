@@ -1,7 +1,7 @@
 use crate::builder::build_command;
 use crate::command::UserCommand;
 use crate::config::{Unit, UnitPermission};
-use crate::systemctl::{statuses, SystemctlManager};
+use crate::systemctl::{statuses, SystemctlError, SystemctlManager};
 use futures::future::join_all;
 use futures::StreamExt;
 use indexmap::IndexMap;
@@ -27,7 +27,7 @@ impl Handler<'_> {
     pub async fn new<'a>(
         guild_id: GuildId,
         units: IndexMap<String, Unit>,
-    ) -> zbus::Result<Handler<'a>> {
+    ) -> Result<Handler<'a>, SystemctlError> {
         Ok(Handler {
             guild_id,
             units,
@@ -43,14 +43,14 @@ impl Handler<'_> {
 
     async fn update_activity_stream(
         &self,
-    ) -> zbus::Result<StreamMap<&str, PropertyStream<'_, String>>> {
+    ) -> Result<StreamMap<&str, PropertyStream<'_, String>>, SystemctlError> {
         let streams = self
             .units_that_allow_status_iter()
             .map(|unit| self.systemctl.status_stream(unit.name.as_str()));
         let streams = join_all(streams)
             .await
             .into_iter()
-            .collect::<zbus::Result<Vec<PropertyStream<String>>>>()?;
+            .collect::<Result<Vec<PropertyStream<String>>, SystemctlError>>()?;
         Ok(self
             .units_that_allow_status_iter()
             .map(|unit| unit.name.as_str())

@@ -12,6 +12,7 @@ use zbus::{dbus_proxy, Connection, PropertyStream};
 pub enum SystemctlError {
     IoError(io::Error),
     NonZeroExit { status: ExitStatus, stderr: String },
+    DBusError(zbus::Error),
 }
 
 impl Display for SystemctlError {
@@ -20,7 +21,8 @@ impl Display for SystemctlError {
             SystemctlError::IoError(e) => write!(f, "{}", e),
             SystemctlError::NonZeroExit { status, stderr } => {
                 write!(f, "systemctl failed with {}\n\n{}", status, stderr)
-            }
+            },
+            SystemctlError::DBusError(e) => write!(f, "{}", e)
         }
     }
 }
@@ -43,6 +45,12 @@ impl From<Output> for SystemctlError {
             status: output.status,
             stderr: to_str(output.stderr),
         }
+    }
+}
+
+impl From<zbus::Error> for SystemctlError {
+    fn from(error: zbus::Error) -> Self {
+        SystemctlError::DBusError(error)
     }
 }
 
@@ -86,7 +94,7 @@ pub struct SystemctlManager<'a> {
 }
 
 impl SystemctlManager<'_> {
-    pub async fn new<'a>() -> zbus::Result<SystemctlManager<'a>> {
+    pub async fn new<'a>() -> Result<SystemctlManager<'a>, SystemctlError> {
         let conn = Connection::system().await?;
         let client = ManagerProxy::new(&conn).await?;
         Ok(SystemctlManager { client })
@@ -104,12 +112,12 @@ impl SystemctlManager<'_> {
         systemctl_do("restart", &unit).await
     }
 
-    pub async fn status(&self, unit: &str) -> zbus::Result<String> {
+    pub async fn status(&self, unit: &str) -> Result<String, SystemctlError> {
         let unit = self.client.load_unit(unit).await?;
-        unit.active_state().await
+        Ok(unit.active_state().await?)
     }
 
-    pub async fn status_stream(&self, unit: &str) -> zbus::Result<PropertyStream<'_, String>> {
+    pub async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>, SystemctlError> {
         Ok(self
             .client
             .load_unit(unit)
@@ -122,14 +130,14 @@ impl SystemctlManager<'_> {
 async fn status_with_name<'a, 'b>(
     systemctl: &SystemctlManager<'a>,
     unit: &'b str,
-) -> (&'b str, zbus::Result<String>) {
+) -> (&'b str, Result<String, SystemctlError>) {
     (unit, systemctl.status(unit).await)
 }
 
 pub async fn statuses<'a, 'b, I: Iterator<Item = &'b str>>(
     systemctl: &SystemctlManager<'a>,
     units: I,
-) -> Vec<(&'b str, zbus::Result<String>)> {
+) -> Vec<(&'b str, Result<String, SystemctlError>)> {
     let statuses = units.map(|unit| status_with_name(systemctl, unit));
     join_all(statuses).await
 }
