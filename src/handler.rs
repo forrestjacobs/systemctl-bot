@@ -108,8 +108,7 @@ impl Handler<'_> {
                 unit: self.get_unit_from_opt(options.get(0)?)?,
             }),
             "status" => {
-                let option = options.get(0);
-                Some(match option {
+                Some(match options.get(0) {
                     Some(option) => UserCommand::SingleStatus {
                         unit: self.get_unit_from_opt(option)?,
                     },
