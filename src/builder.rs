@@ -1,8 +1,6 @@
 use crate::config::{CommandType, Unit, UnitPermission};
 use indexmap::IndexMap;
-use serenity::builder::{
-    CreateApplicationCommand, CreateApplicationCommandOption, CreateApplicationCommands,
-};
+use serenity::builder::{CreateApplicationCommandOption, CreateApplicationCommands};
 use serenity::model::interactions::application_command::ApplicationCommandOptionType;
 
 struct Command<'a> {
@@ -40,14 +38,12 @@ fn get_filtered_units<P: Fn(&Unit) -> bool>(
         .collect::<Vec<&str>>()
 }
 
-fn create_commands(units: &IndexMap<String, Unit>) -> Vec<Command> {
-    let mut commands = Vec::new();
-
+fn create_commands<F: FnMut(Command)>(units: &IndexMap<String, Unit>, mut register: F) {
     let startable_units = get_filtered_units(units, |unit| {
         unit.permissions.contains(&UnitPermission::Start)
     });
     if !startable_units.is_empty() {
-        commands.push(Command {
+        register(Command {
             name: "start",
             description: "Start units",
             units: startable_units,
@@ -60,7 +56,7 @@ fn create_commands(units: &IndexMap<String, Unit>) -> Vec<Command> {
         unit.permissions.contains(&UnitPermission::Stop)
     });
     if !stoppable_units.is_empty() {
-        commands.push(Command {
+        register(Command {
             name: "stop",
             description: "Stops units",
             units: stoppable_units,
@@ -74,7 +70,7 @@ fn create_commands(units: &IndexMap<String, Unit>) -> Vec<Command> {
             && unit.permissions.contains(&UnitPermission::Start)
     });
     if !restartable_units.is_empty() {
-        commands.push(Command {
+        register(Command {
             name: "restart",
             description: "Restarts units",
             units: restartable_units,
@@ -87,7 +83,7 @@ fn create_commands(units: &IndexMap<String, Unit>) -> Vec<Command> {
         unit.permissions.contains(&UnitPermission::Status)
     });
     if !checkable_units.is_empty() {
-        commands.push(Command {
+        register(Command {
             name: "status",
             description: "Checks units' status",
             units: checkable_units,
@@ -95,38 +91,6 @@ fn create_commands(units: &IndexMap<String, Unit>) -> Vec<Command> {
             units_required: false,
         });
     }
-
-    commands
-}
-
-fn build_single_command<'a>(
-    commands: Vec<Command>,
-    builder: &'a mut CreateApplicationCommand,
-) -> &'a mut CreateApplicationCommand {
-    builder.name("systemctl").description("Controls units");
-    for command in commands {
-        builder.create_option(|sub| {
-            sub.name(command.name)
-                .description(command.description)
-                .kind(ApplicationCommandOptionType::SubCommand)
-                .create_sub_option(|opt| setup_unit_option(opt, &command))
-        });
-    }
-    builder
-}
-
-fn build_multiple_commands<'a>(
-    commands: Vec<Command>,
-    builder: &'a mut CreateApplicationCommands,
-) -> &'a mut CreateApplicationCommands {
-    for command in commands {
-        builder.create_application_command(|ac| {
-            ac.name(command.name)
-                .description(command.description)
-                .create_option(|opt| setup_unit_option(opt, &command))
-        });
-    }
-    builder
 }
 
 pub fn build_commands<'a>(
@@ -134,12 +98,28 @@ pub fn build_commands<'a>(
     command_type: &CommandType,
     builder: &'a mut CreateApplicationCommands,
 ) -> &'a mut CreateApplicationCommands {
-    let commands = create_commands(units);
-
     match command_type {
-        CommandType::Single => {
-            builder.create_application_command(|command| build_single_command(commands, command))
+        CommandType::Single => builder.create_application_command(|builder| {
+            builder.name("systemctl").description("Controls units");
+            create_commands(units, |command| {
+                builder.create_option(|o| {
+                    o.name(command.name)
+                        .description(command.description)
+                        .kind(ApplicationCommandOptionType::SubCommand)
+                        .create_sub_option(|opt| setup_unit_option(opt, &command))
+                });
+            });
+            builder
+        }),
+        CommandType::Multiple => {
+            create_commands(units, |command| {
+                builder.create_application_command(|c| {
+                    c.name(command.name)
+                        .description(command.description)
+                        .create_option(|opt| setup_unit_option(opt, &command))
+                });
+            });
+            builder
         }
-        CommandType::Multiple => build_multiple_commands(commands, builder),
     }
 }
