@@ -1,6 +1,6 @@
-use crate::builder::build_command;
+use crate::builder::build_commands;
 use crate::command::UserCommand;
-use crate::config::{Unit, UnitPermission};
+use crate::config::{CommandType, Unit, UnitPermission};
 use crate::systemctl::{statuses, SystemctlError, SystemctlManager};
 use futures::future::join_all;
 use futures::StreamExt;
@@ -19,6 +19,7 @@ use zbus::PropertyStream;
 
 pub struct Handler<'a> {
     pub guild_id: GuildId,
+    pub command_type: CommandType,
     pub units: IndexMap<String, Unit>,
     systemctl: SystemctlManager<'a>,
 }
@@ -26,10 +27,12 @@ pub struct Handler<'a> {
 impl Handler<'_> {
     pub async fn new<'a>(
         guild_id: GuildId,
+        command_type: CommandType,
         units: IndexMap<String, Unit>,
     ) -> Result<Handler<'a>, SystemctlError> {
         Ok(Handler {
             guild_id,
+            command_type,
             units,
             systemctl: SystemctlManager::new().await?,
         })
@@ -87,19 +90,25 @@ impl Handler<'_> {
     }
 
     fn parse_command(&self, interaction: &ApplicationCommandInteraction) -> Option<UserCommand> {
-        let sub_command = interaction.data.options.get(0)?.to_owned();
-        match sub_command.name.as_str() {
+        let (name, options) = match self.command_type {
+            CommandType::Single => {
+                let sub = interaction.data.options.get(0)?;
+                (&sub.name, &sub.options)
+            }
+            CommandType::Multiple => (&interaction.data.name, &interaction.data.options),
+        };
+        match name.as_str() {
             "start" => Some(UserCommand::Start {
-                unit: self.get_unit_from_opt(sub_command.options.get(0)?)?,
+                unit: self.get_unit_from_opt(options.get(0)?)?,
             }),
             "stop" => Some(UserCommand::Stop {
-                unit: self.get_unit_from_opt(sub_command.options.get(0)?)?,
+                unit: self.get_unit_from_opt(options.get(0)?)?,
             }),
             "restart" => Some(UserCommand::Restart {
-                unit: self.get_unit_from_opt(sub_command.options.get(0)?)?,
+                unit: self.get_unit_from_opt(options.get(0)?)?,
             }),
             "status" => {
-                let option = sub_command.options.get(0);
+                let option = options.get(0);
                 Some(match option {
                     Some(option) => UserCommand::SingleStatus {
                         unit: self.get_unit_from_opt(option)?,
@@ -118,7 +127,7 @@ impl Handler<'_> {
 impl EventHandler for Handler<'_> {
     async fn ready(&self, ctx: Context, _: Ready) {
         GuildId::set_application_commands(&self.guild_id, &ctx.http, |builder| {
-            builder.create_application_command(|command| build_command(&self.units, command))
+            build_commands(&self.units, &self.command_type, builder)
         })
         .await
         .unwrap();

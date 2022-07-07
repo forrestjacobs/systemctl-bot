@@ -11,6 +11,19 @@ pub enum UnitPermission {
     Status,
 }
 
+#[derive(Deserialize, Hash, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandType {
+    Single,
+    Multiple,
+}
+
+impl Default for CommandType {
+    fn default() -> Self {
+        CommandType::Single
+    }
+}
+
 #[derive(Deserialize)]
 pub struct Unit {
     #[serde(deserialize_with = "deserialize_unit_name")]
@@ -23,6 +36,8 @@ pub struct Config {
     pub application_id: u64,
     pub discord_token: String,
     pub guild_id: u64,
+    #[serde(default)]
+    pub command_type: CommandType,
     #[serde(deserialize_with = "deserialize_units")]
     pub units: IndexMap<String, Unit>,
 }

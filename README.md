@@ -65,12 +65,13 @@ I wrote this bot because I wanted my friends to be able to log in to my small Mi
 
 systemctl-bot reads its configuration from `/etc/systemctl-bot.toml`, unless you set a different path with the `--config` flag. This is a [TOML](https://toml.io/) file with the following keys:
 
-| key              | type                                  | description                                                            |
-| ---------------- | ------------------------------------- | ---------------------------------------------------------------------- |
-| `application_id` | number                                | Application ID from the Discord Developer Portal. (See _Setup_ above.) |
-| `guild_id`       | number                                | Your Discord server's guild ID. (See _Setup_ above.)                   |
-| `discord_token`  | string                                | Bot token from the Discord Developer Portal. (See _Setup_ above.)      |
-| `units`          | array of [units](#unit-configuration) | Units to control. See [unit configuration](#unit-configuration) below. |
+| key              | type                                    | description                                                                                  |
+| ---------------- | --------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `application_id` | number                                  | Application ID from the Discord Developer Portal. (See _Setup_ above.)                       |
+| `guild_id`       | number                                  | Your Discord server's guild ID. (See _Setup_ above.)                                         |
+| `discord_token`  | string                                  | Bot token from the Discord Developer Portal. (See _Setup_ above.)                            |
+| `command_type`   | either "single" (default) or "multiple" | Whether to use a single, `/systemctl` command, or separate `/start`, `/stop`, etc. commands. |
+| `units`          | array of [units](#unit-configuration)   | Units to control. See [unit configuration](#unit-configuration) below.                       |
 
 ### Unit configuration
 

@@ -24,7 +24,7 @@ async fn main() {
 
     let config = get_config(args.config).await.unwrap();
 
-    let handler = Handler::new(GuildId(config.guild_id), config.units)
+    let handler = Handler::new(GuildId(config.guild_id), config.command_type, config.units)
         .await
         .unwrap();
 
