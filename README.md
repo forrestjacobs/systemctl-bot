@@ -60,3 +60,21 @@ I wrote this bot because I wanted my friends to be able to log in to my small Mi
     ```
 
  8. You can now control units by typing `/systemctl <start|stop|restart|status> [unit name]` in your Discord server!
+
+## Configuration
+
+systemctl-bot reads its configuration from `/etc/systemctl-bot.toml`, unless you set a different path with the `--config` flag. This is a [TOML](https://toml.io/) file with the following keys:
+
+| key              | type                                  | description                                                            |
+| ---------------- | ------------------------------------- | ---------------------------------------------------------------------- |
+| `application_id` | number                                | Application ID from the Discord Developer Portal. (See _Setup_ above.) |
+| `guild_id`       | number                                | Your Discord server's guild ID. (See _Setup_ above.)                   |
+| `discord_token`  | string                                | Bot token from the Discord Developer Portal. (See _Setup_ above.)      |
+| `units`          | array of [units](#unit-configuration) | Units to control. See [unit configuration](#unit-configuration) below. |
+
+### Unit configuration
+
+| key           | type             | description                                                                   |
+| ------------- | ---------------- | ----------------------------------------------------------------------------- |
+| `name`        | string           | Name of the systemd unit. You can omit the `.service` for service units.      |
+| `permissions` | array of strings | Array of allowed actions. Possible values are: "start", "stop", and "status". |
