@@ -3,24 +3,22 @@ use indexmap::IndexMap;
 use serenity::builder::{CreateApplicationCommandOption, CreateApplicationCommands};
 use serenity::model::interactions::application_command::ApplicationCommandOptionType;
 
-struct Command<'a> {
-    name: &'a str,
-    description: &'a str,
+struct UnitOption<'a> {
     units: Vec<&'a str>,
-    units_description: &'a str,
-    units_required: bool,
+    description: &'a str,
+    required: bool,
 }
 
 fn setup_unit_option<'a>(
     builder: &'a mut CreateApplicationCommandOption,
-    command: &Command<'_>,
+    unit_option: &UnitOption<'_>,
 ) -> &'a mut CreateApplicationCommandOption {
     builder
         .name("unit")
         .kind(ApplicationCommandOptionType::String)
-        .description(command.units_description)
-        .required(command.units_required);
-    for unit in &command.units {
+        .description(unit_option.description)
+        .required(unit_option.required);
+    for unit in &unit_option.units {
         let alias = unit.strip_suffix(".service").unwrap_or(unit);
         builder.add_string_choice(alias, unit);
     }
@@ -38,31 +36,32 @@ fn get_filtered_units<P: Fn(&Unit) -> bool>(
         .collect::<Vec<&str>>()
 }
 
-fn create_commands<F: FnMut(Command)>(units: &IndexMap<String, Unit>, mut register: F) {
+fn create_commands<F>(units: &IndexMap<String, Unit>, mut register: F)
+where
+    F: FnMut(&str, &str, UnitOption),
+{
     let startable_units = get_filtered_units(units, |unit| {
         unit.permissions.contains(&UnitPermission::Start)
     });
     if !startable_units.is_empty() {
-        register(Command {
-            name: "start",
-            description: "Start units",
+        let option = UnitOption {
             units: startable_units,
-            units_description: "The unit to start",
-            units_required: true,
-        });
+            description: "The unit to start",
+            required: true,
+        };
+        register("start", "Start units", option);
     }
 
     let stoppable_units = get_filtered_units(units, |unit| {
         unit.permissions.contains(&UnitPermission::Stop)
     });
     if !stoppable_units.is_empty() {
-        register(Command {
-            name: "stop",
-            description: "Stops units",
+        let option = UnitOption {
             units: stoppable_units,
-            units_description: "The unit to stop",
-            units_required: true,
-        });
+            description: "The unit to stop",
+            required: true,
+        };
+        register("stop", "Stops units", option);
     }
 
     let restartable_units = get_filtered_units(units, |unit| {
@@ -70,26 +69,24 @@ fn create_commands<F: FnMut(Command)>(units: &IndexMap<String, Unit>, mut regist
             && unit.permissions.contains(&UnitPermission::Start)
     });
     if !restartable_units.is_empty() {
-        register(Command {
-            name: "restart",
-            description: "Restarts units",
+        let option = UnitOption {
             units: restartable_units,
-            units_description: "The unit to restart",
-            units_required: true,
-        });
+            description: "The unit to restart",
+            required: true,
+        };
+        register("restart", "Restarts units", option);
     }
 
     let checkable_units = get_filtered_units(units, |unit| {
         unit.permissions.contains(&UnitPermission::Status)
     });
     if !checkable_units.is_empty() {
-        register(Command {
-            name: "status",
-            description: "Checks units' status",
+        let option = UnitOption {
             units: checkable_units,
-            units_description: "The unit to check",
-            units_required: false,
-        });
+            description: "The unit to check",
+            required: false,
+        };
+        register("status", "Checks units' status", option);
     }
 }
 
@@ -101,22 +98,22 @@ pub fn build_commands<'a>(
     match command_type {
         CommandType::Single => builder.create_application_command(|builder| {
             builder.name("systemctl").description("Controls units");
-            create_commands(units, |command| {
+            create_commands(units, |name, description, unit_option| {
                 builder.create_option(|o| {
-                    o.name(command.name)
-                        .description(command.description)
+                    o.name(name)
+                        .description(description)
                         .kind(ApplicationCommandOptionType::SubCommand)
-                        .create_sub_option(|opt| setup_unit_option(opt, &command))
+                        .create_sub_option(|opt| setup_unit_option(opt, &unit_option))
                 });
             });
             builder
         }),
         CommandType::Multiple => {
-            create_commands(units, |command| {
+            create_commands(units, |name, description, unit_option| {
                 builder.create_application_command(|c| {
-                    c.name(command.name)
-                        .description(command.description)
-                        .create_option(|opt| setup_unit_option(opt, &command))
+                    c.name(name)
+                        .description(description)
+                        .create_option(|opt| setup_unit_option(opt, &unit_option))
                 });
             });
             builder
