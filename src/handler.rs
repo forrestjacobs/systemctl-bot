@@ -133,7 +133,7 @@ impl EventHandler for Handler<'_> {
 
         let mut stream = self.update_activity_stream().await.unwrap();
         self.update_activity(&ctx).await;
-        while let Some(_) = stream.next().await {
+        while stream.next().await.is_some() {
             self.update_activity(&ctx).await;
         }
     }

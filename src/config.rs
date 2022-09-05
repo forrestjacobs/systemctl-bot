@@ -47,7 +47,7 @@ where
     D: Deserializer<'de>,
 {
     let mut name: String = String::deserialize(deserializer)?;
-    if !name.contains(".") {
+    if !name.contains('.') {
         name = format!("{}.service", name);
     }
     Ok(name)
