@@ -7,13 +7,12 @@ use futures::StreamExt;
 use indexmap::IndexMap;
 use serenity::async_trait;
 use serenity::client::{Context, EventHandler};
+use serenity::model::application::interaction::application_command::{
+    ApplicationCommandInteraction, CommandDataOption, CommandDataOptionValue,
+};
+use serenity::model::application::interaction::{Interaction, InteractionResponseType};
 use serenity::model::gateway::{Activity, Ready};
 use serenity::model::id::GuildId;
-use serenity::model::interactions::application_command::{
-    ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
-    ApplicationCommandInteractionDataOptionValue,
-};
-use serenity::model::interactions::{Interaction, InteractionResponseType};
 use tokio_stream::StreamMap;
 use zbus::PropertyStream;
 
@@ -80,11 +79,9 @@ impl Handler<'_> {
         }
     }
 
-    fn get_unit_from_opt(&self, option: &ApplicationCommandInteractionDataOption) -> Option<&Unit> {
+    fn get_unit_from_opt(&self, option: &CommandDataOption) -> Option<&Unit> {
         match &option.resolved {
-            Some(ApplicationCommandInteractionDataOptionValue::String(name)) => {
-                self.units.get(name)
-            }
+            Some(CommandDataOptionValue::String(name)) => self.units.get(name),
             _ => None,
         }
     }
@@ -107,16 +104,14 @@ impl Handler<'_> {
             "restart" => Some(UserCommand::Restart {
                 unit: self.get_unit_from_opt(options.get(0)?)?,
             }),
-            "status" => {
-                Some(match options.get(0) {
-                    Some(option) => UserCommand::SingleStatus {
-                        unit: self.get_unit_from_opt(option)?,
-                    },
-                    None => UserCommand::MultiStatus {
-                        units: self.units_that_allow_status_iter().collect(),
-                    },
-                })
-            }
+            "status" => Some(match options.get(0) {
+                Some(option) => UserCommand::SingleStatus {
+                    unit: self.get_unit_from_opt(option)?,
+                },
+                None => UserCommand::MultiStatus {
+                    units: self.units_that_allow_status_iter().collect(),
+                },
+            }),
             _ => None,
         }
     }

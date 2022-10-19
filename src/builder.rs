@@ -1,7 +1,7 @@
 use crate::config::{CommandType, Unit, UnitPermission};
 use indexmap::IndexMap;
 use serenity::builder::{CreateApplicationCommandOption, CreateApplicationCommands};
-use serenity::model::interactions::application_command::ApplicationCommandOptionType;
+use serenity::model::application::command::CommandOptionType;
 
 struct UnitOption<'a> {
     units: Vec<&'a str>,
@@ -15,7 +15,7 @@ fn setup_unit_option<'a>(
 ) -> &'a mut CreateApplicationCommandOption {
     builder
         .name("unit")
-        .kind(ApplicationCommandOptionType::String)
+        .kind(CommandOptionType::String)
         .description(unit_option.description)
         .required(unit_option.required);
     for unit in &unit_option.units {
@@ -102,7 +102,7 @@ pub fn build_commands<'a>(
                 builder.create_option(|o| {
                     o.name(name)
                         .description(description)
-                        .kind(ApplicationCommandOptionType::SubCommand)
+                        .kind(CommandOptionType::SubCommand)
                         .create_sub_option(|opt| setup_unit_option(opt, &unit_option))
                 });
             });

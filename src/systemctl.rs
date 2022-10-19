@@ -21,8 +21,8 @@ impl Display for SystemctlError {
             SystemctlError::IoError(e) => write!(f, "{}", e),
             SystemctlError::NonZeroExit { status, stderr } => {
                 write!(f, "systemctl failed with {}\n\n{}", status, stderr)
-            },
-            SystemctlError::DBusError(e) => write!(f, "{}", e)
+            }
+            SystemctlError::DBusError(e) => write!(f, "{}", e),
         }
     }
 }
@@ -117,7 +117,10 @@ impl SystemctlManager<'_> {
         Ok(unit.active_state().await?)
     }
 
-    pub async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>, SystemctlError> {
+    pub async fn status_stream(
+        &self,
+        unit: &str,
+    ) -> Result<PropertyStream<'_, String>, SystemctlError> {
         Ok(self
             .client
             .load_unit(unit)
