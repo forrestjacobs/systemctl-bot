@@ -68,7 +68,7 @@ where
 pub fn get_config(path: String) -> Result<SystemctlBotConfig, Box<dyn std::error::Error>> {
     Ok(Config::builder()
         .add_source(config::File::with_name(&path))
-        .add_source(config::Environment::with_prefix("SYSTEMCTLBOT"))
+        .add_source(config::Environment::with_prefix("SBOT"))
         .build()?
         .try_deserialize()?)
 }
