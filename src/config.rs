@@ -1,7 +1,7 @@
+use config::Config;
 use indexmap::IndexMap;
 use serde::{self, Deserialize, Deserializer};
 use std::collections::HashSet;
-use tokio::fs;
 
 #[derive(Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -32,7 +32,7 @@ pub struct Unit {
 }
 
 #[derive(Deserialize)]
-pub struct Config {
+pub struct SystemctlBotConfig {
     pub application_id: u64,
     pub discord_token: String,
     pub guild_id: u64,
@@ -65,6 +65,10 @@ where
     Ok(units)
 }
 
-pub async fn get_config(path: String) -> Result<Config, Box<dyn std::error::Error>> {
-    Ok(toml::from_str(fs::read_to_string(path).await?.as_str())?)
+pub fn get_config(path: String) -> Result<SystemctlBotConfig, Box<dyn std::error::Error>> {
+    Ok(Config::builder()
+        .add_source(config::File::with_name(&path))
+        .add_source(config::Environment::with_prefix("SYSTEMCTLBOT"))
+        .build()?
+        .try_deserialize()?)
 }

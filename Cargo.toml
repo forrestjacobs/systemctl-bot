@@ -9,12 +9,15 @@ publish = false
 futures = "0.3"
 indexmap = "1.8"
 tokio-stream = "0.1"
-toml = "0.5"
-zvariant = "3.2"
 
 [dependencies.clap]
 version = "3.1"
 features = ["derive"]
+
+[dependencies.config]
+version = "0.13"
+default-features = false
+features = ["toml"]
 
 [dependencies.serde]
 version = "1.0"

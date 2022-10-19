@@ -22,7 +22,7 @@ struct Args {
 async fn main() {
     let args = Args::parse();
 
-    let config = get_config(args.config).await.unwrap();
+    let config = get_config(args.config).unwrap();
 
     let handler = Handler::new(GuildId(config.guild_id), config.command_type, config.units)
         .await
