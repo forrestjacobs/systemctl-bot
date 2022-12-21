@@ -1,7 +1,7 @@
 use crate::builder::build_commands;
 use crate::command::UserCommand;
 use crate::config::{CommandType, Unit, UnitPermission};
-use crate::systemctl::{statuses, SystemctlError, SystemctlManager};
+use crate::systemd_status::{statuses, SystemdStatusManager};
 use futures::future::join_all;
 use futures::StreamExt;
 use indexmap::IndexMap;
@@ -20,7 +20,7 @@ pub struct Handler<'a> {
     pub guild_id: GuildId,
     pub command_type: CommandType,
     pub units: IndexMap<String, Unit>,
-    systemctl: SystemctlManager<'a>,
+    systemd_status_manager: SystemdStatusManager<'a>,
 }
 
 impl Handler<'_> {
@@ -28,12 +28,12 @@ impl Handler<'_> {
         guild_id: GuildId,
         command_type: CommandType,
         units: IndexMap<String, Unit>,
-    ) -> Result<Handler<'a>, SystemctlError> {
+    ) -> Result<Handler<'a>, zbus::Error> {
         Ok(Handler {
             guild_id,
             command_type,
             units,
-            systemctl: SystemctlManager::new().await?,
+            systemd_status_manager: SystemdStatusManager::new().await?,
         })
     }
 
@@ -45,14 +45,15 @@ impl Handler<'_> {
 
     async fn update_activity_stream(
         &self,
-    ) -> Result<StreamMap<&str, PropertyStream<'_, String>>, SystemctlError> {
-        let streams = self
-            .units_that_allow_status_iter()
-            .map(|unit| self.systemctl.status_stream(unit.name.as_str()));
+    ) -> Result<StreamMap<&str, PropertyStream<'_, String>>, zbus::Error> {
+        let streams = self.units_that_allow_status_iter().map(|unit| {
+            self.systemd_status_manager
+                .status_stream(unit.name.as_str())
+        });
         let streams = join_all(streams)
             .await
             .into_iter()
-            .collect::<Result<Vec<PropertyStream<String>>, SystemctlError>>()?;
+            .collect::<Result<Vec<PropertyStream<String>>, zbus::Error>>()?;
         Ok(self
             .units_that_allow_status_iter()
             .map(|unit| unit.name.as_str())
@@ -64,7 +65,7 @@ impl Handler<'_> {
         let units = self
             .units_that_allow_status_iter()
             .map(|unit| unit.name.as_str());
-        let statuses = statuses(&self.systemctl, units).await;
+        let statuses = statuses(&self.systemd_status_manager, units).await;
         let active_units = statuses
             .into_iter()
             .filter(|(_, status)| status.as_ref().map_or(false, |status| status == "active"))
@@ -143,7 +144,7 @@ impl EventHandler for Handler<'_> {
                         })
                         .await
                         .unwrap();
-                    let response_content = match command.run(&self.systemctl).await {
+                    let response_content = match command.run(&self.systemd_status_manager).await {
                         Ok(value) => value,
                         Err(value) => value.to_string(),
                     };

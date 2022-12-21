@@ -3,6 +3,7 @@ mod command;
 mod config;
 mod handler;
 mod systemctl;
+mod systemd_status;
 
 use crate::config::get_config;
 use clap::Parser;
