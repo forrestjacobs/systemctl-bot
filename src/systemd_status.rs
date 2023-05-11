@@ -20,12 +20,12 @@ trait Unit {
     fn active_state(&self) -> zbus::Result<String>;
 }
 
-pub struct SystemdStatusManager<'a> {
-    client: ManagerProxy<'a>,
+pub struct SystemdStatusManager {
+    client: ManagerProxy<'static>,
 }
 
-impl SystemdStatusManager<'_> {
-    pub async fn new<'a>() -> Result<SystemdStatusManager<'a>, Error> {
+impl SystemdStatusManager {
+    pub async fn new() -> Result<SystemdStatusManager, Error> {
         let conn = Connection::system().await?;
         let client = ManagerProxy::new(&conn).await?;
         Ok(SystemdStatusManager { client })
@@ -44,19 +44,16 @@ impl SystemdStatusManager<'_> {
             .receive_active_state_changed()
             .await)
     }
-}
 
-async fn status_with_name<'a, 'b>(
-    manager: &SystemdStatusManager<'a>,
-    unit: &'b str,
-) -> (&'b str, Result<String, Error>) {
-    (unit, manager.status(unit).await)
-}
+    async fn status_with_name<'a>(&self, unit: &'a str) -> (&'a str, Result<String, Error>) {
+        (unit, self.status(unit).await)
+    }
 
-pub async fn statuses<'a, 'b, I: Iterator<Item = &'b str>>(
-    manager: &SystemdStatusManager<'a>,
-    units: I,
-) -> Vec<(&'b str, Result<String, Error>)> {
-    let statuses = units.map(|unit| status_with_name(manager, unit));
-    join_all(statuses).await
+    pub async fn statuses<'a, I: Iterator<Item = &'a str>>(
+        &self,
+        units: I,
+    ) -> Vec<(&'a str, Result<String, Error>)> {
+        let statuses = units.map(|unit| self.status_with_name(unit));
+        join_all(statuses).await
+    }
 }

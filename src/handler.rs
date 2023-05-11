@@ -1,7 +1,7 @@
 use crate::builder::build_commands;
 use crate::command::UserCommand;
 use crate::config::{CommandType, Unit, UnitPermission};
-use crate::systemd_status::{statuses, SystemdStatusManager};
+use crate::systemd_status::SystemdStatusManager;
 use futures::future::join_all;
 use futures::StreamExt;
 use indexmap::IndexMap;
@@ -16,19 +16,19 @@ use serenity::model::id::GuildId;
 use tokio_stream::StreamMap;
 use zbus::PropertyStream;
 
-pub struct Handler<'a> {
+pub struct Handler {
     pub guild_id: GuildId,
     pub command_type: CommandType,
     pub units: IndexMap<String, Unit>,
-    systemd_status_manager: SystemdStatusManager<'a>,
+    systemd_status_manager: SystemdStatusManager,
 }
 
-impl Handler<'_> {
-    pub async fn new<'a>(
+impl Handler {
+    pub async fn new(
         guild_id: GuildId,
         command_type: CommandType,
         units: IndexMap<String, Unit>,
-    ) -> Result<Handler<'a>, zbus::Error> {
+    ) -> Result<Handler, zbus::Error> {
         Ok(Handler {
             guild_id,
             command_type,
@@ -65,7 +65,7 @@ impl Handler<'_> {
         let units = self
             .units_that_allow_status_iter()
             .map(|unit| unit.name.as_str());
-        let statuses = statuses(&self.systemd_status_manager, units).await;
+        let statuses = self.systemd_status_manager.statuses(units).await;
         let active_units = statuses
             .into_iter()
             .filter(|(_, status)| status.as_ref().map_or(false, |status| status == "active"))
@@ -119,7 +119,7 @@ impl Handler<'_> {
 }
 
 #[async_trait]
-impl EventHandler for Handler<'_> {
+impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, _: Ready) {
         GuildId::set_application_commands(&self.guild_id, &ctx.http, |builder| {
             build_commands(&self.units, &self.command_type, builder)
