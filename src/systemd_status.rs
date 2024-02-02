@@ -44,10 +44,10 @@ impl SystemdStatusManager {
     pub async fn statuses<'a, I: Iterator<Item = &'a str>>(
         &self,
         units: I,
-    ) -> Vec<(&'a str, Result<String, Error>)> {
+    ) -> impl Iterator<Item = (&'a str, Result<String, Error>)> {
         let units: Vec<&str> = units.collect();
         let statuses = units.iter().map(|unit| self.status(unit));
         let statuses = join_all(statuses).await;
-        units.into_iter().zip(statuses).collect()
+        units.into_iter().zip(statuses)
     }
 }

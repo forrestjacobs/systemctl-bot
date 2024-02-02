@@ -1,16 +1,18 @@
-use crate::config::{Unit, UnitPermission};
 use crate::systemctl::{restart, start, stop, SystemctlError};
 use crate::systemd_status::SystemdStatusManager;
+use crate::units::{get_units_with_status_permissions, Unit, UnitPermission};
+use indexmap::IndexMap;
+use itertools::Itertools;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
-pub enum UserCommand<'a> {
-    Start { unit: &'a Unit },
-    Stop { unit: &'a Unit },
-    Restart { unit: &'a Unit },
-    SingleStatus { unit: &'a Unit },
-    MultiStatus { units: Vec<&'a Unit> },
+pub enum UserCommand {
+    Start { unit: String },
+    Stop { unit: String },
+    Restart { unit: String },
+    SingleStatus { unit: String },
+    MultiStatus,
 }
 
 #[derive(Debug)]
@@ -46,55 +48,57 @@ impl From<zbus::Error> for UserCommandError {
     }
 }
 
-fn ensure_allowed(unit: &Unit, permission: UnitPermission) -> Result<(), UserCommandError> {
-    if unit.permissions.contains(&permission) {
+fn ensure_allowed(
+    units: &IndexMap<String, Unit>,
+    unit: &str,
+    permission: UnitPermission,
+) -> Result<(), UserCommandError> {
+    if units
+        .get(unit)
+        .map_or(false, |unit| unit.permissions.contains(&permission))
+    {
         Ok(())
     } else {
         Err(UserCommandError::NotAllowed)
     }
 }
 
-impl UserCommand<'_> {
+impl UserCommand {
     pub async fn run(
         &self,
+        units: &IndexMap<String, Unit>,
         systemd_status_manager: &SystemdStatusManager,
     ) -> Result<String, UserCommandError> {
         match self {
             UserCommand::Start { unit } => {
-                ensure_allowed(unit, UnitPermission::Start)?;
-                start(&unit.name).await?;
-                Ok(format!("Started {}", unit.name))
+                ensure_allowed(units, unit, UnitPermission::Start)?;
+                start(unit).await?;
+                Ok(format!("Started {}", unit))
             }
             UserCommand::Stop { unit } => {
-                ensure_allowed(unit, UnitPermission::Stop)?;
-                stop(&unit.name).await?;
-                Ok(format!("Stopped {}", unit.name))
+                ensure_allowed(units, unit, UnitPermission::Stop)?;
+                stop(unit).await?;
+                Ok(format!("Stopped {}", unit))
             }
             UserCommand::Restart { unit } => {
-                ensure_allowed(unit, UnitPermission::Stop)?;
-                ensure_allowed(unit, UnitPermission::Start)?;
-                restart(&unit.name).await?;
-                Ok(format!("Restarted {}", unit.name))
+                ensure_allowed(units, unit, UnitPermission::Stop)?;
+                ensure_allowed(units, unit, UnitPermission::Start)?;
+                restart(unit).await?;
+                Ok(format!("Restarted {}", unit))
             }
             UserCommand::SingleStatus { unit } => {
-                ensure_allowed(unit, UnitPermission::Status)?;
-                Ok(systemd_status_manager.status(unit.name.as_str()).await?)
+                ensure_allowed(units, unit, UnitPermission::Status)?;
+                Ok(systemd_status_manager.status(unit).await?)
             }
-            UserCommand::MultiStatus { units } => {
-                for unit in units {
-                    ensure_allowed(unit, UnitPermission::Status)?;
-                }
-
-                let statuses = systemd_status_manager
-                    .statuses(units.iter().map(|u| u.name.as_str()))
-                    .await;
-                let status_lines = statuses
-                    .into_iter()
+            UserCommand::MultiStatus => {
+                let mut status_lines = systemd_status_manager
+                    .statuses(get_units_with_status_permissions(units))
+                    .await
                     .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
                     .filter(|(_, status)| status != "inactive")
                     .map(|(unit, status)| format!("{}: {}", unit, status))
-                    .collect::<Vec<String>>();
-                let response = if status_lines.is_empty() {
+                    .peekable();
+                let response = if status_lines.peek().is_none() {
                     String::from("Nothing is active")
                 } else {
                     status_lines.join("\n")

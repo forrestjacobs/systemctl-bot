@@ -1,15 +1,7 @@
+use crate::units::Unit;
 use config::Config;
 use indexmap::IndexMap;
 use serde::{self, Deserialize, Deserializer};
-use std::collections::HashSet;
-
-#[derive(Deserialize, Hash, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum UnitPermission {
-    Start,
-    Stop,
-    Status,
-}
 
 #[derive(Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -25,13 +17,6 @@ impl Default for CommandType {
 }
 
 #[derive(Deserialize)]
-pub struct Unit {
-    #[serde(deserialize_with = "deserialize_unit_name")]
-    pub name: String,
-    pub permissions: HashSet<UnitPermission>,
-}
-
-#[derive(Deserialize)]
 pub struct SystemctlBotConfig {
     pub application_id: u64,
     pub discord_token: String,
@@ -40,17 +25,6 @@ pub struct SystemctlBotConfig {
     pub command_type: CommandType,
     #[serde(deserialize_with = "deserialize_units")]
     pub units: IndexMap<String, Unit>,
-}
-
-fn deserialize_unit_name<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let mut name: String = String::deserialize(deserializer)?;
-    if !name.contains('.') {
-        name = format!("{}.service", name);
-    }
-    Ok(name)
 }
 
 fn deserialize_units<'de, D>(deserializer: D) -> Result<IndexMap<String, Unit>, D::Error>

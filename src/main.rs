@@ -2,8 +2,11 @@ mod builder;
 mod command;
 mod config;
 mod handler;
+mod parser;
+mod status_monitor;
 mod systemctl;
 mod systemd_status;
+mod units;
 
 use crate::config::get_config;
 use clap::Parser;
@@ -22,21 +25,19 @@ struct Args {
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-
     let config = get_config(args.config).unwrap();
 
-    let handler = Handler::new(GuildId(config.guild_id), config.command_type, config.units)
+    let guild_id = GuildId(config.guild_id);
+    let handler = Handler::new(guild_id, config.command_type, config.units)
         .await
         .unwrap();
 
-    let mut client = Client::builder(
-        config.discord_token,
-        GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
-    )
-    .event_handler(handler)
-    .application_id(config.application_id)
-    .await
-    .unwrap();
+    let intents = GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES;
+    let mut client = Client::builder(config.discord_token, intents)
+        .event_handler(handler)
+        .application_id(config.application_id)
+        .await
+        .unwrap();
 
     client.start().await.unwrap();
 }

@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 futures = "0.3"
 indexmap = "1.8"
+itertools = "0.12"
 tokio-stream = "0.1"
 
 [dependencies.clap]

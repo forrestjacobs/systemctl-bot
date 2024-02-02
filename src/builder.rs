@@ -1,7 +1,11 @@
-use crate::config::{CommandType, Unit, UnitPermission};
+use crate::config::CommandType;
+use crate::units::{
+    get_units_with_permissions, get_units_with_status_permissions, Unit, UnitPermission,
+};
 use indexmap::IndexMap;
 use serenity::builder::{CreateApplicationCommandOption, CreateApplicationCommands};
 use serenity::model::application::command::CommandOptionType;
+use std::collections::HashSet;
 
 struct UnitOption<'a> {
     units: Vec<&'a str>,
@@ -25,24 +29,12 @@ fn setup_unit_option<'a>(
     builder
 }
 
-fn get_filtered_units<P: Fn(&Unit) -> bool>(
-    units: &IndexMap<String, Unit>,
-    predicate: P,
-) -> Vec<&str> {
-    units
-        .iter()
-        .filter(|(_, unit)| predicate(unit))
-        .map(|(name, _)| name.as_str())
-        .collect::<Vec<&str>>()
-}
-
 fn create_commands<F>(units: &IndexMap<String, Unit>, mut register: F)
 where
     F: FnMut(&str, &str, UnitOption),
 {
-    let startable_units = get_filtered_units(units, |unit| {
-        unit.permissions.contains(&UnitPermission::Start)
-    });
+    let startable_units: Vec<&str> =
+        get_units_with_permissions(units, HashSet::from([UnitPermission::Start])).collect();
     if !startable_units.is_empty() {
         let option = UnitOption {
             units: startable_units,
@@ -52,9 +44,8 @@ where
         register("start", "Start units", option);
     }
 
-    let stoppable_units = get_filtered_units(units, |unit| {
-        unit.permissions.contains(&UnitPermission::Stop)
-    });
+    let stoppable_units: Vec<&str> =
+        get_units_with_permissions(units, HashSet::from([UnitPermission::Stop])).collect();
     if !stoppable_units.is_empty() {
         let option = UnitOption {
             units: stoppable_units,
@@ -64,10 +55,11 @@ where
         register("stop", "Stops units", option);
     }
 
-    let restartable_units = get_filtered_units(units, |unit| {
-        unit.permissions.contains(&UnitPermission::Stop)
-            && unit.permissions.contains(&UnitPermission::Start)
-    });
+    let restartable_units: Vec<&str> = get_units_with_permissions(
+        units,
+        HashSet::from([UnitPermission::Stop, UnitPermission::Start]),
+    )
+    .collect();
     if !restartable_units.is_empty() {
         let option = UnitOption {
             units: restartable_units,
@@ -77,9 +69,7 @@ where
         register("restart", "Restarts units", option);
     }
 
-    let checkable_units = get_filtered_units(units, |unit| {
-        unit.permissions.contains(&UnitPermission::Status)
-    });
+    let checkable_units: Vec<&str> = get_units_with_status_permissions(units).collect();
     if !checkable_units.is_empty() {
         let option = UnitOption {
             units: checkable_units,
