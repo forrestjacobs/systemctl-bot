@@ -5,7 +5,6 @@ use crate::units::{
 use indexmap::IndexMap;
 use serenity::builder::{CreateApplicationCommandOption, CreateApplicationCommands};
 use serenity::model::application::command::CommandOptionType;
-use std::collections::HashSet;
 
 struct UnitOption<'a> {
     units: Vec<&'a str>,
@@ -34,7 +33,7 @@ where
     F: FnMut(&str, &str, UnitOption),
 {
     let startable_units: Vec<&str> =
-        get_units_with_permissions(units, HashSet::from([UnitPermission::Start])).collect();
+        get_units_with_permissions(units, [UnitPermission::Start]).collect();
     if !startable_units.is_empty() {
         let option = UnitOption {
             units: startable_units,
@@ -45,7 +44,7 @@ where
     }
 
     let stoppable_units: Vec<&str> =
-        get_units_with_permissions(units, HashSet::from([UnitPermission::Stop])).collect();
+        get_units_with_permissions(units, [UnitPermission::Stop]).collect();
     if !stoppable_units.is_empty() {
         let option = UnitOption {
             units: stoppable_units,
@@ -55,11 +54,8 @@ where
         register("stop", "Stops units", option);
     }
 
-    let restartable_units: Vec<&str> = get_units_with_permissions(
-        units,
-        HashSet::from([UnitPermission::Stop, UnitPermission::Start]),
-    )
-    .collect();
+    let restartable_units: Vec<&str> =
+        get_units_with_permissions(units, [UnitPermission::Stop, UnitPermission::Start]).collect();
     if !restartable_units.is_empty() {
         let option = UnitOption {
             units: restartable_units,

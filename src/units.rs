@@ -17,20 +17,21 @@ pub struct Unit {
     pub permissions: HashSet<UnitPermission>,
 }
 
-pub fn get_units_with_permissions(
+pub fn get_units_with_permissions<const N: usize>(
     units: &IndexMap<String, Unit>,
-    permissions: HashSet<UnitPermission>,
+    permissions: [UnitPermission; N],
 ) -> impl Iterator<Item = &str> {
+    let subset = HashSet::from(permissions);
     units
         .iter()
-        .filter(move |(_, unit)| unit.permissions.is_superset(&permissions))
+        .filter(move |(_, unit)| unit.permissions.is_superset(&subset))
         .map(|(name, _)| name.as_str())
 }
 
 pub fn get_units_with_status_permissions(
     units: &IndexMap<String, Unit>,
 ) -> impl Iterator<Item = &str> {
-    get_units_with_permissions(units, HashSet::from([UnitPermission::Status]))
+    get_units_with_permissions(units, [UnitPermission::Status])
 }
 
 fn deserialize_unit_name<'de, D>(deserializer: D) -> Result<String, D::Error>
