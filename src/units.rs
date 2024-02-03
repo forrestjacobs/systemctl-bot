@@ -35,7 +35,6 @@ impl UnitsTrait for Units {
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
-
     use super::*;
 
     #[test]
