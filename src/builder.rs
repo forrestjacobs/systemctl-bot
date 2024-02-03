@@ -13,24 +13,31 @@ struct CommandDescription<'a> {
     unit_option_required: bool,
 }
 
-fn create_unit_option(
-    units: &IndexMap<String, Unit>,
-    desc: &CommandDescription<'_>,
-) -> CreateCommandOption {
+struct Command<'a, U: Iterator<Item = &'a str>> {
+    description: CommandDescription<'a>,
+    units: U,
+}
+
+fn create_unit_option<'a, U>(command: Command<'a, U>) -> CreateCommandOption
+where
+    U: Iterator<Item = &'a str>,
+{
     let base_option = CreateCommandOption::new(
         CommandOptionType::String,
         "unit",
-        desc.unit_option_description,
+        command.description.unit_option_description,
     )
-    .required(desc.unit_option_required);
-    get_units_with_permissions(units, desc.permissions).fold(base_option, |option, unit| {
+    .required(command.description.unit_option_required);
+    command.units.fold(base_option, |option, unit| {
         let alias = unit.strip_suffix(".service").unwrap_or(unit);
         option.add_string_choice(alias, unit)
     })
 }
 
-fn create_commands(units: &IndexMap<String, Unit>) -> impl Iterator<Item = CommandDescription<'_>> {
-    let commands = [
+fn get_commands(
+    units: &IndexMap<String, Unit>,
+) -> impl Iterator<Item = Command<'_, impl Iterator<Item = &'_ str>>> {
+    let descriptions = [
         CommandDescription {
             permissions: UnitPermissions::Start,
             name: "start",
@@ -61,19 +68,28 @@ fn create_commands(units: &IndexMap<String, Unit>) -> impl Iterator<Item = Comma
         },
     ];
 
-    commands.into_iter().filter(|command| {
-        get_units_with_permissions(units, command.permissions)
-            .peekable()
-            .peek()
-            .is_some()
+    descriptions.into_iter().filter_map(|description| {
+        let mut units = get_units_with_permissions(units, description.permissions).peekable();
+        match units.peek() {
+            Some(_) => Some(Command { description, units }),
+            None => None,
+        }
     })
 }
 
-fn build_single_command(units: &IndexMap<String, Unit>) -> CreateCommand {
-    let options = create_commands(units)
-        .map(|desc| {
-            CreateCommandOption::new(CommandOptionType::SubCommand, desc.name, desc.description)
-                .add_sub_option(create_unit_option(units, &desc))
+fn create_single_command<'a, U, I>(commands: I) -> CreateCommand
+where
+    U: Iterator<Item = &'a str>,
+    I: Iterator<Item = Command<'a, U>>,
+{
+    let options = commands
+        .map(|command| {
+            CreateCommandOption::new(
+                CommandOptionType::SubCommand,
+                command.description.name,
+                command.description.description,
+            )
+            .add_sub_option(create_unit_option(command))
         })
         .collect_vec();
     CreateCommand::new("systemctl")
@@ -81,12 +97,16 @@ fn build_single_command(units: &IndexMap<String, Unit>) -> CreateCommand {
         .set_options(options)
 }
 
-fn build_multiple_commands(units: &IndexMap<String, Unit>) -> Vec<CreateCommand> {
-    create_commands(units)
-        .map(|desc| {
-            CreateCommand::new(desc.name)
-                .description(desc.description)
-                .add_option(create_unit_option(units, &desc))
+fn create_commands<'a, U, I>(commands: I) -> Vec<CreateCommand>
+where
+    U: Iterator<Item = &'a str>,
+    I: Iterator<Item = Command<'a, U>>,
+{
+    commands
+        .map(|command| {
+            CreateCommand::new(command.description.name)
+                .description(command.description.description)
+                .add_option(create_unit_option(command))
         })
         .collect_vec()
 }
@@ -95,8 +115,9 @@ pub fn build_commands(
     units: &IndexMap<String, Unit>,
     command_type: &CommandType,
 ) -> Vec<CreateCommand> {
+    let commands = get_commands(units);
     match command_type {
-        CommandType::Single => vec![build_single_command(units)],
-        CommandType::Multiple => build_multiple_commands(units),
+        CommandType::Single => vec![create_single_command(commands)],
+        CommandType::Multiple => create_commands(commands),
     }
 }
