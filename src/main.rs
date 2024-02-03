@@ -11,6 +11,7 @@ mod units;
 use crate::config::get_config;
 use clap::Parser;
 use handler::Handler;
+use serenity::all::ApplicationId;
 use serenity::client::Client;
 use serenity::model::gateway::GatewayIntents;
 use serenity::model::id::GuildId;
@@ -27,7 +28,7 @@ async fn main() {
     let args = Args::parse();
     let config = get_config(args.config).unwrap();
 
-    let guild_id = GuildId(config.guild_id);
+    let guild_id = GuildId::new(config.guild_id);
     let handler = Handler::new(guild_id, config.command_type, config.units)
         .await
         .unwrap();
@@ -35,7 +36,7 @@ async fn main() {
     let intents = GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES;
     let mut client = Client::builder(config.discord_token, intents)
         .event_handler(handler)
-        .application_id(config.application_id)
+        .application_id(ApplicationId::new(config.application_id))
         .await
         .unwrap();
 

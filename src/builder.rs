@@ -1,108 +1,101 @@
 use crate::config::CommandType;
-use crate::units::{
-    get_units_with_permissions, get_units_with_status_permissions, Unit, UnitPermission,
-};
+use crate::units::{get_units_with_permissions, Unit, UnitPermission};
 use indexmap::IndexMap;
-use serenity::builder::{CreateApplicationCommandOption, CreateApplicationCommands};
-use serenity::model::application::command::CommandOptionType;
+use itertools::Itertools;
+use serenity::all::CommandOptionType;
+use serenity::builder::{CreateCommand, CreateCommandOption};
 
-struct UnitOption<'a> {
-    units: Vec<&'a str>,
+struct CommandDescription<'a> {
+    permissions: Vec<UnitPermission>,
+    name: &'a str,
     description: &'a str,
-    required: bool,
+    unit_option_description: &'a str,
+    unit_option_required: bool,
 }
 
-fn setup_unit_option<'a>(
-    builder: &'a mut CreateApplicationCommandOption,
-    unit_option: &UnitOption<'_>,
-) -> &'a mut CreateApplicationCommandOption {
-    builder
-        .name("unit")
-        .kind(CommandOptionType::String)
-        .description(unit_option.description)
-        .required(unit_option.required);
-    for unit in &unit_option.units {
+fn create_unit_option(
+    units: &IndexMap<String, Unit>,
+    desc: &CommandDescription<'_>,
+) -> CreateCommandOption {
+    let base_option = CreateCommandOption::new(
+        CommandOptionType::String,
+        "unit",
+        desc.unit_option_description,
+    )
+    .required(desc.unit_option_required);
+    get_units_with_permissions(units, desc.permissions.iter()).fold(base_option, |option, unit| {
         let alias = unit.strip_suffix(".service").unwrap_or(unit);
-        builder.add_string_choice(alias, unit);
-    }
-    builder
+        option.add_string_choice(alias, unit)
+    })
 }
 
-fn create_commands<F>(units: &IndexMap<String, Unit>, mut register: F)
-where
-    F: FnMut(&str, &str, UnitOption),
-{
-    let startable_units: Vec<&str> =
-        get_units_with_permissions(units, [UnitPermission::Start]).collect();
-    if !startable_units.is_empty() {
-        let option = UnitOption {
-            units: startable_units,
-            description: "The unit to start",
-            required: true,
-        };
-        register("start", "Start units", option);
-    }
+fn create_commands(units: &IndexMap<String, Unit>) -> impl Iterator<Item = CommandDescription<'_>> {
+    let commands = [
+        CommandDescription {
+            permissions: vec![UnitPermission::Start],
+            name: "start",
+            description: "Start units",
+            unit_option_description: "The unit to start",
+            unit_option_required: true,
+        },
+        CommandDescription {
+            permissions: vec![UnitPermission::Stop],
+            name: "stop",
+            description: "Stop units",
+            unit_option_description: "The unit to stop",
+            unit_option_required: true,
+        },
+        CommandDescription {
+            permissions: vec![UnitPermission::Stop, UnitPermission::Start],
+            name: "restart",
+            description: "Restarts units",
+            unit_option_description: "The unit to restart",
+            unit_option_required: true,
+        },
+        CommandDescription {
+            permissions: vec![UnitPermission::Status],
+            name: "status",
+            description: "Checks units' status",
+            unit_option_description: "The unit to check",
+            unit_option_required: false,
+        },
+    ];
 
-    let stoppable_units: Vec<&str> =
-        get_units_with_permissions(units, [UnitPermission::Stop]).collect();
-    if !stoppable_units.is_empty() {
-        let option = UnitOption {
-            units: stoppable_units,
-            description: "The unit to stop",
-            required: true,
-        };
-        register("stop", "Stops units", option);
-    }
-
-    let restartable_units: Vec<&str> =
-        get_units_with_permissions(units, [UnitPermission::Stop, UnitPermission::Start]).collect();
-    if !restartable_units.is_empty() {
-        let option = UnitOption {
-            units: restartable_units,
-            description: "The unit to restart",
-            required: true,
-        };
-        register("restart", "Restarts units", option);
-    }
-
-    let checkable_units: Vec<&str> = get_units_with_status_permissions(units).collect();
-    if !checkable_units.is_empty() {
-        let option = UnitOption {
-            units: checkable_units,
-            description: "The unit to check",
-            required: false,
-        };
-        register("status", "Checks units' status", option);
-    }
+    commands.into_iter().filter(|command| {
+        get_units_with_permissions(units, command.permissions.iter())
+            .peekable()
+            .peek()
+            .is_some()
+    })
 }
 
 pub fn build_commands<'a>(
     units: &IndexMap<String, Unit>,
     command_type: &CommandType,
-    builder: &'a mut CreateApplicationCommands,
-) -> &'a mut CreateApplicationCommands {
+) -> Vec<CreateCommand> {
     match command_type {
-        CommandType::Single => builder.create_application_command(|builder| {
-            builder.name("systemctl").description("Controls units");
-            create_commands(units, |name, description, unit_option| {
-                builder.create_option(|o| {
-                    o.name(name)
-                        .description(description)
-                        .kind(CommandOptionType::SubCommand)
-                        .create_sub_option(|opt| setup_unit_option(opt, &unit_option))
-                });
-            });
-            builder
-        }),
-        CommandType::Multiple => {
-            create_commands(units, |name, description, unit_option| {
-                builder.create_application_command(|c| {
-                    c.name(name)
-                        .description(description)
-                        .create_option(|opt| setup_unit_option(opt, &unit_option))
-                });
-            });
-            builder
+        CommandType::Single => {
+            let options = create_commands(units)
+                .map(|desc| {
+                    CreateCommandOption::new(
+                        CommandOptionType::SubCommand,
+                        desc.name,
+                        desc.description,
+                    )
+                    .add_sub_option(create_unit_option(units, &desc))
+                })
+                .collect_vec();
+            let command = CreateCommand::new("systemctl")
+                .description("Controls units")
+                .set_options(options);
+            vec![command]
         }
+        CommandType::Multiple => create_commands(units)
+            .map(|desc| {
+                CreateCommand::new(desc.name)
+                    .description(desc.description)
+                    .add_option(create_unit_option(units, &desc))
+            })
+            .collect_vec(),
     }
 }

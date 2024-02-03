@@ -6,13 +6,13 @@ use crate::status_monitor::monitor_status;
 use crate::systemd_status::SystemdStatusManager;
 use crate::units::Unit;
 use indexmap::IndexMap;
+use serenity::all::CommandInteraction;
 use serenity::async_trait;
-use serenity::client::{Context, EventHandler};
-use serenity::model::application::interaction::application_command::ApplicationCommandInteraction;
-use serenity::model::application::interaction::Interaction;
-use serenity::model::application::interaction::InteractionResponseType::{
-    ChannelMessageWithSource, DeferredChannelMessageWithSource,
+use serenity::builder::{
+    CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage,
 };
+use serenity::client::{Context, EventHandler};
+use serenity::model::application::Interaction;
 use serenity::model::gateway::Ready;
 use serenity::model::id::GuildId;
 
@@ -41,33 +41,31 @@ impl Handler {
         &self,
         command: UserCommand,
         ctx: Context,
-        interaction: ApplicationCommandInteraction,
+        interaction: CommandInteraction,
     ) {
-        interaction
-            .create_interaction_response(&ctx, |r| r.kind(DeferredChannelMessageWithSource))
-            .await
-            .unwrap();
+        interaction.defer(&ctx).await.unwrap();
         let run = command.run(&self.units, &self.systemd_status_manager).await;
         let content = match run {
             Ok(value) => value,
             Err(value) => value.to_string(),
         };
         interaction
-            .create_followup_message(&ctx, |r| r.content(content))
+            .create_followup(
+                &ctx,
+                CreateInteractionResponseFollowup::new().content(content),
+            )
             .await
             .unwrap();
     }
 
-    async fn handle_invalid_command(
-        &self,
-        ctx: Context,
-        interaction: ApplicationCommandInteraction,
-    ) {
+    async fn handle_invalid_command(&self, ctx: Context, interaction: CommandInteraction) {
         interaction
-            .create_interaction_response(&ctx, |r| {
-                r.kind(ChannelMessageWithSource)
-                    .interaction_response_data(|data| data.content("Invalid command"))
-            })
+            .create_response(
+                &ctx,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new().content("Invalid command"),
+                ),
+            )
             .await
             .unwrap();
     }
@@ -76,17 +74,14 @@ impl Handler {
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, _: Ready) {
-        GuildId::set_application_commands(&self.guild_id, &ctx.http, |builder| {
-            build_commands(&self.units, &self.command_type, builder)
-        })
-        .await
-        .unwrap();
+        let commands = build_commands(&self.units, &self.command_type);
+        self.guild_id.set_commands(&ctx, commands).await.unwrap();
 
         let _ = monitor_status(&self.units, &ctx, &self.systemd_status_manager).await;
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        if let Interaction::ApplicationCommand(interaction) = interaction {
+        if let Interaction::Command(interaction) = interaction {
             match parse_command(&self.command_type, &interaction) {
                 Some(command) => self.handle_command(command, ctx, interaction).await,
                 _ => self.handle_invalid_command(ctx, interaction).await,

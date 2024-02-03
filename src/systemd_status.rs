@@ -1,4 +1,5 @@
 use futures::future::join_all;
+use itertools::Itertools;
 use zbus::{dbus_proxy, Connection, Error, PropertyStream};
 
 #[dbus_proxy(
@@ -45,7 +46,7 @@ impl SystemdStatusManager {
         &self,
         units: I,
     ) -> impl Iterator<Item = (&'a str, Result<String, Error>)> {
-        let units: Vec<&str> = units.collect();
+        let units = units.collect_vec();
         let statuses = units.iter().map(|unit| self.status(unit));
         let statuses = join_all(statuses).await;
         units.into_iter().zip(statuses)
