@@ -11,6 +11,10 @@ indexmap = "2.2"
 itertools = "0.12"
 tokio-stream = "0.1"
 
+[dependencies.bitflags]
+version = "2.4"
+features = ["serde"]
+
 [dependencies.clap]
 version = "4.0"
 features = ["derive"]

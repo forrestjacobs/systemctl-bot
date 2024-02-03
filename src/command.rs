@@ -1,6 +1,6 @@
 use crate::systemctl::{restart, start, stop, SystemctlError};
 use crate::systemd_status::SystemdStatusManager;
-use crate::units::{get_units_with_status_permissions, Unit, UnitPermission};
+use crate::units::{get_units_with_status_permissions, Unit, UnitPermissions};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use std::error::Error;
@@ -51,11 +51,11 @@ impl From<zbus::Error> for UserCommandError {
 fn ensure_allowed(
     units: &IndexMap<String, Unit>,
     unit: &str,
-    permission: UnitPermission,
+    permissions: UnitPermissions,
 ) -> Result<(), UserCommandError> {
     if units
         .get(unit)
-        .map_or(false, |unit| unit.permissions.contains(&permission))
+        .map_or(false, |unit| unit.permissions.contains(permissions))
     {
         Ok(())
     } else {
@@ -71,23 +71,22 @@ impl UserCommand {
     ) -> Result<String, UserCommandError> {
         match self {
             UserCommand::Start { unit } => {
-                ensure_allowed(units, unit, UnitPermission::Start)?;
+                ensure_allowed(units, unit, UnitPermissions::Start)?;
                 start(unit).await?;
                 Ok(format!("Started {}", unit))
             }
             UserCommand::Stop { unit } => {
-                ensure_allowed(units, unit, UnitPermission::Stop)?;
+                ensure_allowed(units, unit, UnitPermissions::Stop)?;
                 stop(unit).await?;
                 Ok(format!("Stopped {}", unit))
             }
             UserCommand::Restart { unit } => {
-                ensure_allowed(units, unit, UnitPermission::Stop)?;
-                ensure_allowed(units, unit, UnitPermission::Start)?;
+                ensure_allowed(units, unit, UnitPermissions::Stop | UnitPermissions::Start)?;
                 restart(unit).await?;
                 Ok(format!("Restarted {}", unit))
             }
             UserCommand::SingleStatus { unit } => {
-                ensure_allowed(units, unit, UnitPermission::Status)?;
+                ensure_allowed(units, unit, UnitPermissions::Status)?;
                 Ok(systemd_status_manager.status(unit).await?)
             }
             UserCommand::MultiStatus => {

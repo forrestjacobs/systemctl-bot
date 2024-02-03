@@ -272,6 +272,9 @@ name = "bitflags"
 version = "2.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed570934406eb16438a4e976b1b4500774099c13b8cb96eec99f620f05090ddf"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "block-buffer"
@@ -1709,6 +1712,7 @@ dependencies = [
 name = "systemctl-bot"
 version = "0.4.2"
 dependencies = [
+ "bitflags 2.4.2",
  "clap",
  "config",
  "futures",

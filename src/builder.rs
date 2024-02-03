@@ -1,12 +1,12 @@
 use crate::config::CommandType;
-use crate::units::{get_units_with_permissions, Unit, UnitPermission};
+use crate::units::{get_units_with_permissions, Unit, UnitPermissions};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use serenity::all::CommandOptionType;
 use serenity::builder::{CreateCommand, CreateCommandOption};
 
 struct CommandDescription<'a> {
-    permissions: Vec<UnitPermission>,
+    permissions: UnitPermissions,
     name: &'a str,
     description: &'a str,
     unit_option_description: &'a str,
@@ -23,7 +23,7 @@ fn create_unit_option(
         desc.unit_option_description,
     )
     .required(desc.unit_option_required);
-    get_units_with_permissions(units, desc.permissions.iter()).fold(base_option, |option, unit| {
+    get_units_with_permissions(units, desc.permissions).fold(base_option, |option, unit| {
         let alias = unit.strip_suffix(".service").unwrap_or(unit);
         option.add_string_choice(alias, unit)
     })
@@ -32,28 +32,28 @@ fn create_unit_option(
 fn create_commands(units: &IndexMap<String, Unit>) -> impl Iterator<Item = CommandDescription<'_>> {
     let commands = [
         CommandDescription {
-            permissions: vec![UnitPermission::Start],
+            permissions: UnitPermissions::Start,
             name: "start",
             description: "Start units",
             unit_option_description: "The unit to start",
             unit_option_required: true,
         },
         CommandDescription {
-            permissions: vec![UnitPermission::Stop],
+            permissions: UnitPermissions::Stop,
             name: "stop",
             description: "Stop units",
             unit_option_description: "The unit to stop",
             unit_option_required: true,
         },
         CommandDescription {
-            permissions: vec![UnitPermission::Stop, UnitPermission::Start],
+            permissions: UnitPermissions::Stop | UnitPermissions::Start,
             name: "restart",
             description: "Restarts units",
             unit_option_description: "The unit to restart",
             unit_option_required: true,
         },
         CommandDescription {
-            permissions: vec![UnitPermission::Status],
+            permissions: UnitPermissions::Status,
             name: "status",
             description: "Checks units' status",
             unit_option_description: "The unit to check",
@@ -62,7 +62,7 @@ fn create_commands(units: &IndexMap<String, Unit>) -> impl Iterator<Item = Comma
     ];
 
     commands.into_iter().filter(|command| {
-        get_units_with_permissions(units, command.permissions.iter())
+        get_units_with_permissions(units, command.permissions)
             .peekable()
             .peek()
             .is_some()
