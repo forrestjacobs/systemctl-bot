@@ -4,8 +4,7 @@ use crate::config::CommandType;
 use crate::parser::parse_command;
 use crate::status_monitor::monitor_status;
 use crate::systemd_status::SystemdStatusManager;
-use crate::units::Unit;
-use indexmap::IndexMap;
+use crate::units::Units;
 use serenity::all::CommandInteraction;
 use serenity::async_trait;
 use serenity::builder::{
@@ -19,7 +18,7 @@ use serenity::model::id::GuildId;
 pub struct Handler {
     pub guild_id: GuildId,
     pub command_type: CommandType,
-    pub units: IndexMap<String, Unit>,
+    pub units: Units,
     systemd_status_manager: SystemdStatusManager,
 }
 
@@ -27,7 +26,7 @@ impl Handler {
     pub async fn new(
         guild_id: GuildId,
         command_type: CommandType,
-        units: IndexMap<String, Unit>,
+        units: Units,
     ) -> Result<Handler, zbus::Error> {
         Ok(Handler {
             guild_id,

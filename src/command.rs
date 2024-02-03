@@ -1,7 +1,6 @@
 use crate::systemctl::{restart, start, stop, SystemctlError};
 use crate::systemd_status::SystemdStatusManager;
-use crate::units::{get_units_with_status_permissions, Unit, UnitPermissions};
-use indexmap::IndexMap;
+use crate::units::{UnitPermissions, Units, UnitsTrait};
 use itertools::Itertools;
 use std::error::Error;
 use std::fmt;
@@ -49,7 +48,7 @@ impl From<zbus::Error> for UserCommandError {
 }
 
 fn ensure_allowed(
-    units: &IndexMap<String, Unit>,
+    units: &Units,
     unit: &str,
     permissions: UnitPermissions,
 ) -> Result<(), UserCommandError> {
@@ -66,7 +65,7 @@ fn ensure_allowed(
 impl UserCommand {
     pub async fn run(
         &self,
-        units: &IndexMap<String, Unit>,
+        units: &Units,
         systemd_status_manager: &SystemdStatusManager,
     ) -> Result<String, UserCommandError> {
         match self {
@@ -91,7 +90,7 @@ impl UserCommand {
             }
             UserCommand::MultiStatus => {
                 let mut status_lines = systemd_status_manager
-                    .statuses(get_units_with_status_permissions(units))
+                    .statuses(units.with_permissions(UnitPermissions::Status))
                     .await
                     .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
                     .filter(|(_, status)| status != "inactive")

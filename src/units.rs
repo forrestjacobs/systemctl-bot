@@ -19,20 +19,24 @@ pub struct Unit {
     pub permissions: UnitPermissions,
 }
 
-pub fn get_units_with_permissions<'a>(
-    units: &'a IndexMap<String, Unit>,
-    permissions: UnitPermissions,
-) -> impl Iterator<Item = &'a str> {
-    units
-        .iter()
-        .filter(move |(_, unit)| unit.permissions.contains(permissions))
-        .map(|(name, _)| name.as_str())
+pub type Units = IndexMap<String, Unit>;
+
+pub trait UnitsTrait {
+    fn with_permissions<'a>(
+        &'a self,
+        permissions: UnitPermissions,
+    ) -> impl Iterator<Item = &'a str>;
 }
 
-pub fn get_units_with_status_permissions(
-    units: &IndexMap<String, Unit>,
-) -> impl Iterator<Item = &str> {
-    get_units_with_permissions(units, UnitPermissions::Status)
+impl UnitsTrait for Units {
+    fn with_permissions<'a>(
+        &'a self,
+        permissions: UnitPermissions,
+    ) -> impl Iterator<Item = &'a str> {
+        self.iter()
+            .filter(move |(_, unit)| unit.permissions.contains(permissions))
+            .map(|(name, _)| name.as_str())
+    }
 }
 
 fn deserialize_unit_name<'de, D>(deserializer: D) -> Result<String, D::Error>

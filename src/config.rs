@@ -1,4 +1,4 @@
-use crate::units::Unit;
+use crate::units::{Unit, Units};
 use config::Config;
 use indexmap::IndexMap;
 use serde::{self, Deserialize, Deserializer};
@@ -24,10 +24,10 @@ pub struct SystemctlBotConfig {
     #[serde(default)]
     pub command_type: CommandType,
     #[serde(deserialize_with = "deserialize_units")]
-    pub units: IndexMap<String, Unit>,
+    pub units: Units,
 }
 
-fn deserialize_units<'de, D>(deserializer: D) -> Result<IndexMap<String, Unit>, D::Error>
+fn deserialize_units<'de, D>(deserializer: D) -> Result<Units, D::Error>
 where
     D: Deserializer<'de>,
 {

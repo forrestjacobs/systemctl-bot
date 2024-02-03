@@ -1,6 +1,5 @@
 use crate::config::CommandType;
-use crate::units::{get_units_with_permissions, Unit, UnitPermissions};
-use indexmap::IndexMap;
+use crate::units::{UnitPermissions, Units, UnitsTrait};
 use itertools::Itertools;
 use serenity::all::CommandOptionType;
 use serenity::builder::{CreateCommand, CreateCommandOption};
@@ -34,9 +33,7 @@ where
     })
 }
 
-fn get_commands(
-    units: &IndexMap<String, Unit>,
-) -> impl Iterator<Item = Command<'_, impl Iterator<Item = &'_ str>>> {
+fn get_commands(units: &Units) -> impl Iterator<Item = Command<'_, impl Iterator<Item = &'_ str>>> {
     let descriptions = [
         CommandDescription {
             permissions: UnitPermissions::Start,
@@ -69,7 +66,7 @@ fn get_commands(
     ];
 
     descriptions.into_iter().filter_map(|description| {
-        let mut units = get_units_with_permissions(units, description.permissions).peekable();
+        let mut units = units.with_permissions(description.permissions).peekable();
         match units.peek() {
             Some(_) => Some(Command { description, units }),
             None => None,
@@ -111,10 +108,7 @@ where
         .collect_vec()
 }
 
-pub fn build_commands(
-    units: &IndexMap<String, Unit>,
-    command_type: &CommandType,
-) -> Vec<CreateCommand> {
+pub fn build_commands(units: &Units, command_type: &CommandType) -> Vec<CreateCommand> {
     let commands = get_commands(units);
     match command_type {
         CommandType::Single => vec![create_single_command(commands)],

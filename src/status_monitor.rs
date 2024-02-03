@@ -1,8 +1,7 @@
 use crate::systemd_status::SystemdStatusManager;
-use crate::units::{get_units_with_status_permissions, Unit};
+use crate::units::{UnitPermissions, Units, UnitsTrait};
 use futures::future::join_all;
 use futures::StreamExt;
-use indexmap::IndexMap;
 use itertools::Itertools;
 use serenity::gateway::ActivityData;
 use serenity::prelude::Context;
@@ -10,11 +9,13 @@ use tokio_stream::StreamMap;
 use zbus::PropertyStream;
 
 pub async fn monitor_status(
-    units: &IndexMap<String, Unit>,
+    units: &Units,
     ctx: &Context,
     systemd_status_manager: &SystemdStatusManager,
 ) -> Result<(), zbus::Error> {
-    let units = get_units_with_status_permissions(units).collect_vec();
+    let units = units
+        .with_permissions(UnitPermissions::Status)
+        .collect_vec();
     let streams = units
         .iter()
         .map(|name| systemd_status_manager.status_stream(name));
