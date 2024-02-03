@@ -1,6 +1,6 @@
 {
   description = "Control your Linux server from Discord";
-  
+
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
@@ -26,9 +26,11 @@
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
         };
-      in {
+      in
+      {
         devShells.default = pkgs.mkShell {
           buildInputs = [
+            pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
             (pkgs.rust-bin.stable.latest.default.override {
               extensions = [ "rust-src" ];
             })
