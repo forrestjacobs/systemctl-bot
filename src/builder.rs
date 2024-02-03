@@ -69,33 +69,34 @@ fn create_commands(units: &IndexMap<String, Unit>) -> impl Iterator<Item = Comma
     })
 }
 
-pub fn build_commands<'a>(
+fn build_single_command(units: &IndexMap<String, Unit>) -> CreateCommand {
+    let options = create_commands(units)
+        .map(|desc| {
+            CreateCommandOption::new(CommandOptionType::SubCommand, desc.name, desc.description)
+                .add_sub_option(create_unit_option(units, &desc))
+        })
+        .collect_vec();
+    CreateCommand::new("systemctl")
+        .description("Controls units")
+        .set_options(options)
+}
+
+fn build_multiple_commands(units: &IndexMap<String, Unit>) -> Vec<CreateCommand> {
+    create_commands(units)
+        .map(|desc| {
+            CreateCommand::new(desc.name)
+                .description(desc.description)
+                .add_option(create_unit_option(units, &desc))
+        })
+        .collect_vec()
+}
+
+pub fn build_commands(
     units: &IndexMap<String, Unit>,
     command_type: &CommandType,
 ) -> Vec<CreateCommand> {
     match command_type {
-        CommandType::Single => {
-            let options = create_commands(units)
-                .map(|desc| {
-                    CreateCommandOption::new(
-                        CommandOptionType::SubCommand,
-                        desc.name,
-                        desc.description,
-                    )
-                    .add_sub_option(create_unit_option(units, &desc))
-                })
-                .collect_vec();
-            let command = CreateCommand::new("systemctl")
-                .description("Controls units")
-                .set_options(options);
-            vec![command]
-        }
-        CommandType::Multiple => create_commands(units)
-            .map(|desc| {
-                CreateCommand::new(desc.name)
-                    .description(desc.description)
-                    .add_option(create_unit_option(units, &desc))
-            })
-            .collect_vec(),
+        CommandType::Single => vec![build_single_command(units)],
+        CommandType::Multiple => build_multiple_commands(units),
     }
 }
