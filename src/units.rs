@@ -1,25 +1,18 @@
 use bitflags::bitflags;
 use indexmap::IndexMap;
-use serde::{self, Deserialize, Deserializer};
+use serde::{self, Deserialize};
 
 bitflags! {
     #[derive(Deserialize, Clone, Copy)]
     #[serde(rename_all = "snake_case")]
     pub struct UnitPermissions: u32 {
-        const Start = 0b00000001;
-        const Stop = 0b00000010;
-        const Status = 0b00000100;
+        const Start  = 0b00000100;
+        const Stop   = 0b00000010;
+        const Status = 0b00000001;
     }
 }
 
-#[derive(Deserialize)]
-pub struct Unit {
-    #[serde(deserialize_with = "deserialize_unit_name")]
-    pub name: String,
-    pub permissions: UnitPermissions,
-}
-
-pub type Units = IndexMap<String, Unit>;
+pub type Units = IndexMap<String, UnitPermissions>;
 
 pub trait UnitsTrait {
     fn with_permissions<'a>(
@@ -34,18 +27,43 @@ impl UnitsTrait for Units {
         permissions: UnitPermissions,
     ) -> impl Iterator<Item = &'a str> {
         self.iter()
-            .filter(move |(_, unit)| unit.permissions.contains(permissions))
+            .filter(move |(_, unit)| unit.contains(permissions))
             .map(|(name, _)| name.as_str())
     }
 }
 
-fn deserialize_unit_name<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let mut name: String = String::deserialize(deserializer)?;
-    if !name.contains('.') {
-        name = format!("{}.service", name);
+#[cfg(test)]
+mod tests {
+    use itertools::Itertools;
+
+    use super::*;
+
+    #[test]
+    fn filter_units_by_permissions() {
+        let units = Units::from([
+            ("000".to_string(), UnitPermissions::empty()),
+            ("001".to_string(), UnitPermissions::Status),
+            ("010".to_string(), UnitPermissions::Stop),
+            (
+                "011".to_string(),
+                UnitPermissions::Stop | UnitPermissions::Status,
+            ),
+            ("100".to_string(), UnitPermissions::Start),
+            (
+                "101".to_string(),
+                UnitPermissions::Start | UnitPermissions::Status,
+            ),
+            (
+                "110".to_string(),
+                UnitPermissions::Start | UnitPermissions::Stop,
+            ),
+            ("111".to_string(), UnitPermissions::all()),
+        ]);
+        assert_eq!(
+            units
+                .with_permissions(UnitPermissions::Start | UnitPermissions::Stop)
+                .collect_vec(),
+            ["110", "111"]
+        );
     }
-    Ok(name)
 }

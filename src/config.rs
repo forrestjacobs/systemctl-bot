@@ -1,4 +1,4 @@
-use crate::units::{Unit, Units};
+use crate::units::{UnitPermissions, Units};
 use config::Config;
 use indexmap::IndexMap;
 use serde::{self, Deserialize, Deserializer};
@@ -17,6 +17,24 @@ impl Default for CommandType {
 }
 
 #[derive(Deserialize)]
+struct InternalUnit {
+    #[serde(deserialize_with = "deserialize_unit_name")]
+    name: String,
+    permissions: UnitPermissions,
+}
+
+fn deserialize_unit_name<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let mut name: String = String::deserialize(deserializer)?;
+    if !name.contains('.') {
+        name = format!("{}.service", name);
+    }
+    Ok(name)
+}
+
+#[derive(Deserialize)]
 pub struct SystemctlBotConfig {
     pub application_id: u64,
     pub discord_token: String,
@@ -31,10 +49,10 @@ fn deserialize_units<'de, D>(deserializer: D) -> Result<Units, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let original_units: Vec<Unit> = Vec::deserialize(deserializer)?;
+    let original_units: Vec<InternalUnit> = Vec::deserialize(deserializer)?;
     let mut units = IndexMap::new();
     for unit in original_units {
-        units.insert(String::from(&unit.name), unit);
+        units.insert(String::from(&unit.name), unit.permissions);
     }
     Ok(units)
 }

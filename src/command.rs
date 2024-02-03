@@ -54,7 +54,7 @@ fn ensure_allowed(
 ) -> Result<(), UserCommandError> {
     if units
         .get(unit)
-        .map_or(false, |unit| unit.permissions.contains(permissions))
+        .map_or(false, |unit| unit.contains(permissions))
     {
         Ok(())
     } else {
