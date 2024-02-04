@@ -2,8 +2,9 @@ use crate::units::{UnitPermissions, Units};
 use config::Config;
 use indexmap::IndexMap;
 use serde::{self, Deserialize, Deserializer};
+use std::collections::HashSet;
 
-#[derive(Deserialize, Hash, PartialEq, Eq)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum CommandType {
     Single,
@@ -16,11 +17,29 @@ impl Default for CommandType {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum InternalUnitPermission {
+    Start,
+    Stop,
+    Status,
+}
+
+impl InternalUnitPermission {
+    fn to_permissions(&self) -> UnitPermissions {
+        match self {
+            InternalUnitPermission::Start => UnitPermissions::Start,
+            InternalUnitPermission::Stop => UnitPermissions::Stop,
+            InternalUnitPermission::Status => UnitPermissions::Status,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
 struct InternalUnit {
     #[serde(deserialize_with = "deserialize_unit_name")]
     name: String,
-    permissions: UnitPermissions,
+    permissions: HashSet<InternalUnitPermission>,
 }
 
 fn deserialize_unit_name<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -34,7 +53,7 @@ where
     Ok(name)
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct SystemctlBotConfig {
     pub application_id: u64,
     pub discord_token: String,
@@ -52,7 +71,12 @@ where
     let original_units: Vec<InternalUnit> = Vec::deserialize(deserializer)?;
     let mut units = IndexMap::new();
     for unit in original_units {
-        units.insert(String::from(&unit.name), unit.permissions);
+        units.insert(
+            String::from(&unit.name),
+            unit.permissions
+                .into_iter()
+                .fold(UnitPermissions::empty(), |acc, p| acc | p.to_permissions()),
+        );
     }
     Ok(units)
 }
@@ -63,4 +87,49 @@ pub fn get_config(path: String) -> Result<SystemctlBotConfig, Box<dyn std::error
         .add_source(config::Environment::with_prefix("SBOT"))
         .build()?
         .try_deserialize()?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use config::FileFormat;
+
+    #[test]
+    fn deserialize_config() {
+        let toml = r#"
+        application_id = 88888888
+        guild_id = 99999999
+        discord_token = "88888888.88888888.88888888"
+
+        [[units]]
+        name = "minecraft"
+        permissions = ["start", "stop", "status"]
+
+        [[units]]
+        name = "terraria"
+        permissions = ["status"]
+        "#;
+        let config: SystemctlBotConfig = Config::builder()
+            .add_source(config::File::from_str(toml, FileFormat::Toml))
+            .build()
+            .unwrap()
+            .try_deserialize()
+            .unwrap();
+        assert_eq!(
+            config,
+            SystemctlBotConfig {
+                application_id: 88888888,
+                discord_token: "88888888.88888888.88888888".to_string(),
+                guild_id: 99999999,
+                command_type: CommandType::Single,
+                units: Units::from([
+                    (
+                        "minecraft.service".to_string(),
+                        UnitPermissions::Start | UnitPermissions::Stop | UnitPermissions::Status
+                    ),
+                    ("terraria.service".to_string(), UnitPermissions::Status),
+                ])
+            }
+        )
+    }
 }

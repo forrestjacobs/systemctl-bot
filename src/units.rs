@@ -1,10 +1,8 @@
 use bitflags::bitflags;
 use indexmap::IndexMap;
-use serde::{self, Deserialize};
 
 bitflags! {
-    #[derive(Deserialize, Clone, Copy)]
-    #[serde(rename_all = "snake_case")]
+    #[derive(Clone, Copy, Debug, PartialEq)]
     pub struct UnitPermissions: u32 {
         const Start  = 0b00000100;
         const Stop   = 0b00000010;
