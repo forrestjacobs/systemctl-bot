@@ -56,18 +56,18 @@ impl Handler {
             .await
             .unwrap();
     }
+}
 
-    async fn handle_invalid_command(&self, ctx: Context, interaction: CommandInteraction) {
-        interaction
-            .create_response(
-                &ctx,
-                CreateInteractionResponse::Message(
-                    CreateInteractionResponseMessage::new().content("Invalid command"),
-                ),
-            )
-            .await
-            .unwrap();
-    }
+async fn handle_invalid_command(ctx: Context, interaction: CommandInteraction) {
+    interaction
+        .create_response(
+            &ctx,
+            CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new().content("Invalid command"),
+            ),
+        )
+        .await
+        .unwrap();
 }
 
 #[async_trait]
@@ -83,7 +83,7 @@ impl EventHandler for Handler {
         if let Interaction::Command(interaction) = interaction {
             match parse_command(&self.command_type, &interaction) {
                 Some(command) => self.handle_command(command, ctx, interaction).await,
-                _ => self.handle_invalid_command(ctx, interaction).await,
+                _ => handle_invalid_command(ctx, interaction).await,
             }
         }
     }
