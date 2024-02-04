@@ -38,9 +38,9 @@ impl Handler {
 
     async fn handle_command(
         &self,
-        command: UserCommand,
+        command: UserCommand<'_>,
         ctx: Context,
-        interaction: CommandInteraction,
+        interaction: &CommandInteraction,
     ) {
         interaction.defer(&ctx).await.unwrap();
         let run = command.run(&self.units, &self.systemd_status_manager).await;
@@ -58,7 +58,7 @@ impl Handler {
     }
 }
 
-async fn handle_invalid_command(ctx: Context, interaction: CommandInteraction) {
+async fn handle_invalid_command(ctx: Context, interaction: &CommandInteraction) {
     interaction
         .create_response(
             &ctx,
@@ -82,8 +82,8 @@ impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::Command(interaction) = interaction {
             match parse_command(&self.command_type, &interaction) {
-                Some(command) => self.handle_command(command, ctx, interaction).await,
-                _ => handle_invalid_command(ctx, interaction).await,
+                Some(command) => self.handle_command(command, ctx, &interaction).await,
+                _ => handle_invalid_command(ctx, &interaction).await,
             }
         }
     }
