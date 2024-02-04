@@ -1719,6 +1719,7 @@ dependencies = [
  "indexmap",
  "itertools",
  "serde",
+ "serde_json",
  "serenity",
  "tokio",
  "tokio-stream",

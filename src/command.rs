@@ -6,6 +6,7 @@ use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
+#[derive(Debug, PartialEq)]
 pub enum UserCommand {
     Start { unit: String },
     Stop { unit: String },

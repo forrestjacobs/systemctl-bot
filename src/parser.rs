@@ -1,10 +1,43 @@
 use crate::command::UserCommand;
 use crate::config::CommandType;
-use serenity::all::{CommandDataOption, CommandDataOptionValue, CommandInteraction};
+use serenity::all::{CommandDataOptionValue, CommandInteraction};
 
-fn get_string(option: &CommandDataOption) -> Option<String> {
-    match &option.value {
+fn get_name<'a>(
+    command_type: &CommandType,
+    interaction: &'a CommandInteraction,
+) -> Option<&'a str> {
+    match command_type {
+        CommandType::Single => Some(interaction.data.options.get(0)?.name.as_str()),
+        CommandType::Multiple => Some(interaction.data.name.as_str()),
+    }
+}
+
+fn get_option_value<'a>(
+    command_type: &CommandType,
+    interaction: &'a CommandInteraction,
+) -> Option<String> {
+    let options = match command_type {
+        CommandType::Single => match &interaction.data.options.get(0)?.value {
+            CommandDataOptionValue::SubCommand(options) => Some(options),
+            _ => return None,
+        },
+        CommandType::Multiple => Some(&interaction.data.options),
+    };
+    match &options?.get(0)?.value {
         CommandDataOptionValue::String(name) => Some(name.to_owned()),
+        _ => None,
+    }
+}
+
+fn get_command(name: &str, unit: Option<String>) -> Option<UserCommand> {
+    match name {
+        "start" => Some(UserCommand::Start { unit: unit? }),
+        "stop" => Some(UserCommand::Stop { unit: unit? }),
+        "restart" => Some(UserCommand::Restart { unit: unit? }),
+        "status" => Some(match unit {
+            Some(option) => UserCommand::SingleStatus { unit: option },
+            None => UserCommand::MultiStatus,
+        }),
         _ => None,
     }
 }
@@ -13,32 +46,50 @@ pub fn parse_command(
     command_type: &CommandType,
     interaction: &CommandInteraction,
 ) -> Option<UserCommand> {
-    let (name, options) = match command_type {
-        CommandType::Single => {
-            let sub = interaction.data.options.get(0)?;
-            match &sub.value {
-                CommandDataOptionValue::SubCommand(options) => (&sub.name, options),
-                _ => return None,
-            }
-        }
-        CommandType::Multiple => (&interaction.data.name, &interaction.data.options),
-    };
-    match name.as_str() {
-        "start" => Some(UserCommand::Start {
-            unit: get_string(options.get(0)?)?,
-        }),
-        "stop" => Some(UserCommand::Stop {
-            unit: get_string(options.get(0)?)?,
-        }),
-        "restart" => Some(UserCommand::Restart {
-            unit: get_string(options.get(0)?)?,
-        }),
-        "status" => Some(match options.get(0) {
-            Some(option) => UserCommand::SingleStatus {
-                unit: get_string(option)?,
-            },
-            None => UserCommand::MultiStatus,
-        }),
-        _ => None,
+    let name = get_name(command_type, interaction)?;
+    let option_value = get_option_value(command_type, interaction);
+    get_command(name, option_value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_command() {
+        let unit_name = "unit-name".to_string();
+        let some_unit = Some(unit_name.clone());
+
+        assert_eq!(
+            get_command("start", some_unit.clone()),
+            Some(UserCommand::Start {
+                unit: unit_name.clone()
+            })
+        );
+        assert_eq!(get_command("start", None), None);
+
+        assert_eq!(
+            get_command("stop", some_unit.clone()),
+            Some(UserCommand::Stop {
+                unit: unit_name.clone()
+            })
+        );
+        assert_eq!(get_command("stop", None), None);
+
+        assert_eq!(
+            get_command("restart", some_unit.clone()),
+            Some(UserCommand::Restart {
+                unit: unit_name.clone()
+            })
+        );
+        assert_eq!(get_command("restart", None), None);
+
+        assert_eq!(
+            get_command("status", some_unit.clone()),
+            Some(UserCommand::SingleStatus {
+                unit: unit_name.clone()
+            })
+        );
+        assert_eq!(get_command("status", None), Some(UserCommand::MultiStatus));
     }
 }
