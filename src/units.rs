@@ -34,8 +34,8 @@ impl UnitsTrait for Units {
 
 #[cfg(test)]
 mod tests {
-    use itertools::Itertools;
     use super::*;
+    use itertools::Itertools;
 
     #[test]
     fn filter_units_by_permissions() {
