@@ -91,5 +91,7 @@ mod tests {
             })
         );
         assert_eq!(get_command("status", None), Some(UserCommand::MultiStatus));
+
+        assert_eq!(get_command("invalid", None), None);
     }
 }
