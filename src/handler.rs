@@ -27,7 +27,7 @@ impl Handler {
         guild_id: GuildId,
         command_type: CommandType,
         units: Units,
-    ) -> Result<Handler, zbus::Error> {
+    ) -> anyhow::Result<Handler> {
         Ok(Handler {
             guild_id,
             command_type,

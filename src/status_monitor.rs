@@ -12,7 +12,7 @@ pub async fn monitor_status(
     units: &Units,
     ctx: &Context,
     systemd_status_manager: &SystemdStatusManager,
-) -> Result<(), zbus::Error> {
+) -> anyhow::Result<()> {
     let units = units
         .with_permissions(UnitPermissions::Status)
         .collect_vec();
@@ -22,7 +22,7 @@ pub async fn monitor_status(
     let streams = join_all(streams)
         .await
         .into_iter()
-        .collect::<Result<Vec<PropertyStream<String>>, zbus::Error>>()?;
+        .collect::<anyhow::Result<Vec<PropertyStream<String>>>>()?;
     let mut stream = units
         .iter()
         .map(|&name| name)

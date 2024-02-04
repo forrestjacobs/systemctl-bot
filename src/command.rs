@@ -1,10 +1,8 @@
-use crate::systemctl::{restart, start, stop, SystemctlError};
+use crate::systemctl::{restart, start, stop};
 use crate::systemd_status::SystemdStatusManager;
 use crate::units::{UnitPermissions, Units, UnitsTrait};
+use anyhow::bail;
 use itertools::Itertools;
-use std::error::Error;
-use std::fmt;
-use std::fmt::{Display, Formatter};
 
 #[derive(Debug, PartialEq)]
 pub enum UserCommand {
@@ -15,52 +13,14 @@ pub enum UserCommand {
     MultiStatus,
 }
 
-#[derive(Debug)]
-pub enum UserCommandError {
-    SystemctlError(SystemctlError),
-    ZbusError(zbus::Error),
-    NotAllowed,
-}
-
-impl Display for UserCommandError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            UserCommandError::SystemctlError(e) => write!(f, "{}", e),
-            UserCommandError::ZbusError(e) => write!(f, "{}", e),
-            UserCommandError::NotAllowed => {
-                write!(f, "Command is not allowed")
-            }
-        }
-    }
-}
-
-impl Error for UserCommandError {}
-
-impl From<SystemctlError> for UserCommandError {
-    fn from(error: SystemctlError) -> Self {
-        UserCommandError::SystemctlError(error)
-    }
-}
-
-impl From<zbus::Error> for UserCommandError {
-    fn from(error: zbus::Error) -> Self {
-        UserCommandError::ZbusError(error)
-    }
-}
-
-fn ensure_allowed(
-    units: &Units,
-    unit: &str,
-    permissions: UnitPermissions,
-) -> Result<(), UserCommandError> {
-    if units
+fn ensure_allowed(units: &Units, unit: &str, permissions: UnitPermissions) -> anyhow::Result<()> {
+    if !units
         .get(unit)
         .map_or(false, |unit| unit.contains(permissions))
     {
-        Ok(())
-    } else {
-        Err(UserCommandError::NotAllowed)
+        bail!("Command is not allowed");
     }
+    Ok(())
 }
 
 impl UserCommand {
@@ -68,7 +28,7 @@ impl UserCommand {
         &self,
         units: &Units,
         systemd_status_manager: &SystemdStatusManager,
-    ) -> Result<String, UserCommandError> {
+    ) -> anyhow::Result<String> {
         match self {
             UserCommand::Start { unit } => {
                 ensure_allowed(units, unit, UnitPermissions::Start)?;

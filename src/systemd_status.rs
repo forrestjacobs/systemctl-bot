@@ -1,6 +1,6 @@
 use futures::future::join_all;
 use itertools::Itertools;
-use zbus::{dbus_proxy, Connection, Error, PropertyStream};
+use zbus::{dbus_proxy, Connection, PropertyStream};
 
 #[dbus_proxy(
     interface = "org.freedesktop.systemd1.Manager",
@@ -26,18 +26,18 @@ pub struct SystemdStatusManager {
 }
 
 impl SystemdStatusManager {
-    pub async fn new() -> Result<SystemdStatusManager, Error> {
+    pub async fn new() -> anyhow::Result<SystemdStatusManager> {
         let conn = Connection::system().await?;
         let client = ManagerProxy::new(&conn).await?;
         Ok(SystemdStatusManager { client })
     }
 
-    pub async fn status(&self, unit: &str) -> Result<String, Error> {
+    pub async fn status(&self, unit: &str) -> anyhow::Result<String> {
         let unit = self.client.load_unit(unit).await?;
-        unit.active_state().await
+        Ok(unit.active_state().await?)
     }
 
-    pub async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>, Error> {
+    pub async fn status_stream(&self, unit: &str) -> anyhow::Result<PropertyStream<'_, String>> {
         let unit = self.client.load_unit(unit).await?;
         Ok(unit.receive_active_state_changed().await)
     }
@@ -45,7 +45,7 @@ impl SystemdStatusManager {
     pub async fn statuses<'a, I: Iterator<Item = &'a str>>(
         &self,
         units: I,
-    ) -> impl Iterator<Item = (&'a str, Result<String, Error>)> {
+    ) -> impl Iterator<Item = (&'a str, anyhow::Result<String>)> {
         let units = units.collect_vec();
         let statuses = units.iter().map(|unit| self.status(unit));
         let statuses = join_all(statuses).await;

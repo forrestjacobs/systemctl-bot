@@ -81,7 +81,7 @@ where
     Ok(units)
 }
 
-pub fn get_config(path: String) -> Result<SystemctlBotConfig, Box<dyn std::error::Error>> {
+pub fn get_config(path: String) -> anyhow::Result<SystemctlBotConfig> {
     Ok(Config::builder()
         .add_source(config::File::with_name(&path))
         .add_source(config::Environment::with_prefix("SBOT"))
