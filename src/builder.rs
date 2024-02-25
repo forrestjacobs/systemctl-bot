@@ -218,4 +218,19 @@ mod tests {
             .unwrap()
         );
     }
+
+    #[test]
+    fn it_omits_commands_where_no_units_are_applicable() {
+        let units = Units::from([("checkable.service".to_string(), UnitPermissions::Status)]);
+        assert_eq!(
+            to_value(&build_commands(&units, &CommandType::Multiple)).unwrap(),
+            to_value(&[CreateCommand::new("status")
+                .description("Checks units' status",)
+                .add_option(
+                    CreateCommandOption::new(String, "unit", "The unit to check")
+                        .add_string_choice("checkable", "checkable.service")
+                )])
+            .unwrap()
+        )
+    }
 }
