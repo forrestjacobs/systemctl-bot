@@ -1,23 +1,23 @@
 use futures::future::join_all;
 use itertools::Itertools;
-use zbus::{dbus_proxy, Connection, PropertyStream};
+use zbus::{proxy, Connection, PropertyStream};
 
-#[dbus_proxy(
+#[proxy(
     interface = "org.freedesktop.systemd1.Manager",
     default_service = "org.freedesktop.systemd1",
     default_path = "/org/freedesktop/systemd1"
 )]
 trait Manager {
-    #[dbus_proxy(object = "Unit")]
+    #[zbus(object = "Unit")]
     fn load_unit(&self, name: &str);
 }
 
-#[dbus_proxy(
+#[proxy(
     interface = "org.freedesktop.systemd1.Unit",
     default_service = "org.freedesktop.systemd1"
 )]
 trait Unit {
-    #[dbus_proxy(property)]
+    #[zbus(property)]
     fn active_state(&self) -> zbus::Result<String>;
 }
 
