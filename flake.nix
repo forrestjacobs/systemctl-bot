@@ -28,14 +28,6 @@
         };
       in
       {
-        devShells.default = pkgs.mkShell {
-          buildInputs = [
-            pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
-            (pkgs.rust-bin.stable.latest.default.override {
-              extensions = [ "rust-src" ];
-            })
-          ];
-        };
         packages.systemctl-bot = package;
         packages.default = package;
       }
