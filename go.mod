@@ -10,6 +10,7 @@ require (
 )
 
 require (
+	github.com/go-test/deep v1.1.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gorilla/websocket v1.5.1 // indirect
 	golang.org/x/crypto v0.22.0 // indirect

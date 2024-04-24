@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -93,7 +94,7 @@ func getConfigErrors(config systemctlBotConfig) error {
 		}
 		for _, permission := range unit.Permissions {
 			if permission != Start && permission != Stop && permission != Status {
-				errs = append(errs, errors.New("invalid permission"))
+				errs = append(errs, errors.New("invalid unit permission"))
 			}
 		}
 	}
@@ -102,19 +103,29 @@ func getConfigErrors(config systemctlBotConfig) error {
 }
 
 func getConfig() (systemctlBotConfig, error) {
-	var configPath string
+	var path string
 
 	// TODO: add short version
-	flag.StringVar(&configPath, "config", "/etc/systemctl-bot.toml", "path to config file")
+	flag.StringVar(&path, "config", "/etc/systemctl-bot.toml", "path to config file")
 
 	// TODO: Implement all of Clap's options
 	flag.Parse()
 
-	var config systemctlBotConfig
-
-	_, err := toml.DecodeFile(configPath, &config)
+	reader, err := os.Open(path)
 	if err != nil {
 		return systemctlBotConfig{}, err
+	}
+	defer reader.Close()
+
+	return readConfig(reader)
+}
+
+func readConfig(r io.Reader) (systemctlBotConfig, error) {
+	var config systemctlBotConfig
+
+	_, err := toml.NewDecoder(r).Decode(&config)
+	if err != nil {
+		return config, err
 	}
 
 	if val, present := lookupUint64Env("SBOT_APPLICATION_ID"); present {
