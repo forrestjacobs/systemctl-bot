@@ -36,13 +36,13 @@ func buildCommands(units []*systemctlUnit, callback func(name, description strin
 	stoppableUnits := getUnitsWithPermissions(units, Stop)
 	if len(stoppableUnits) > 0 {
 		unitOption := getUnitOption("The unit to stop", true, stoppableUnits)
-		callback("stop", "Stops units", []*option{&unitOption})
+		callback("stop", "Stop units", []*option{&unitOption})
 	}
 
 	restartableUnits := getUnitsWithPermissions(units, Start, Stop)
 	if len(restartableUnits) > 0 {
 		unitOption := getUnitOption("The unit to restart", true, restartableUnits)
-		callback("restart", "Restarts units", []*option{&unitOption})
+		callback("restart", "Restart units", []*option{&unitOption})
 	}
 
 	checkableUnits := getUnitsWithPermissions(units, Status)
