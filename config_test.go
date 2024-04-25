@@ -2,10 +2,9 @@ package main
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/go-test/deep"
 )
 
 const baseConfigToml = `
@@ -28,7 +27,7 @@ func getBaseConfig() systemctlBotConfig {
 		Units: []*systemctlUnit{
 			{
 				Name:        "s.service",
-				Permissions: []unitPermission{Status},
+				Permissions: []unitPermission{StatusPermission},
 			},
 		},
 	}
@@ -40,8 +39,8 @@ func TestReadConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
-	if diff := deep.Equal(config, getBaseConfig()); diff != nil {
-		t.Error(diff)
+	if eq := reflect.DeepEqual(config, getBaseConfig()); !eq {
+		t.Error("Not equal")
 	}
 }
 
@@ -54,8 +53,8 @@ func TestReadConfigWithInvalidEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
-	if diff := deep.Equal(config, getBaseConfig()); diff != nil {
-		t.Error(diff)
+	if eq := reflect.DeepEqual(config, getBaseConfig()); !eq {
+		t.Error("Not equal")
 	}
 }
 
@@ -70,14 +69,14 @@ func TestReadConfigWithEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
-	if diff := deep.Equal(config, systemctlBotConfig{
+	if eq := reflect.DeepEqual(config, systemctlBotConfig{
 		ApplicationID: 10,
 		GuildID:       20,
 		DiscordToken:  "Z",
 		CommandType:   Multiple,
 		Units:         getBaseConfig().Units,
-	}); diff != nil {
-		t.Error(diff)
+	}); !eq {
+		t.Error("Not equal")
 	}
 }
 
@@ -99,7 +98,7 @@ func TestReadConfigSuppliesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
-	if diff := deep.Equal(config, systemctlBotConfig{
+	if eq := reflect.DeepEqual(config, systemctlBotConfig{
 		ApplicationID: 1,
 		GuildID:       2,
 		DiscordToken:  "a",
@@ -107,15 +106,15 @@ func TestReadConfigSuppliesDefaults(t *testing.T) {
 		Units: []*systemctlUnit{
 			{
 				Name:        "s.service",
-				Permissions: []unitPermission{Status},
+				Permissions: []unitPermission{StatusPermission},
 			},
 			{
 				Name:        "t.timer",
-				Permissions: []unitPermission{Status},
+				Permissions: []unitPermission{StatusPermission},
 			},
 		},
-	}); diff != nil {
-		t.Error(diff)
+	}); !eq {
+		t.Error("Not equal")
 	}
 }
 

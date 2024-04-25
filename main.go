@@ -35,18 +35,20 @@ func dieOnError(err error, code exitErrorCode) {
 func main() {
 	config, err := getConfig()
 	dieOnError(err, ConfigReadError)
+	commandUnits := getCommandUnits(config.Units)
 
-	commands, err := getCommands(config.Units, config.CommandType)
+	commands, err := getCommands(commandUnits, config.CommandType)
 	dieOnError(err, CommandConstructionError)
 
-	systemd, err := dbus.NewSystemdConnectionContext(context.Background())
+	conn, err := dbus.NewSystemdConnectionContext(context.Background())
 	dieOnError(err, SystemdOpenConnectionError)
-	defer systemd.Close()
+	defer conn.Close()
+	systemd := systemdImpl{conn: conn}
 
 	discord, err := discordgo.New("Bot " + config.DiscordToken)
 	dieOnError(err, DiscordCreateSessionError)
 
-	discord.AddHandler(makeInteractionHandler(&config, systemd))
+	discord.AddHandler(makeInteractionHandler(commandUnits, &systemd))
 	dieOnError(discord.Open(), DiscordOpenConnectionError)
 	defer discord.Close()
 
@@ -55,23 +57,15 @@ func main() {
 	_, err = discord.ApplicationCommandBulkOverwrite(applicationID, guildID, commands)
 	dieOnError(err, DiscordSetCommandError)
 
-	subscription := systemd.NewSubscriptionSet()
-	for _, unit := range getUnitsWithPermissions(config.Units, Status) {
-		subscription.Add(unit.Name)
-	}
-	statusChan, errChan := subscription.Subscribe()
+	activeUnitsChan, errChan := systemd.subscribeToActiveUnits(commandUnits[StatusCommand])
 
-	unitActiveMap := make(map[string]bool)
 	for {
 		select {
-		case statuses := <-statusChan:
-			for name, status := range statuses {
-				unitActiveMap[name] = status.ActiveState == "active"
-			}
-			activeList := lo.FilterMap(config.Units, func(unit *systemctlUnit, _ int) (string, bool) {
-				return unit.Name, unitActiveMap[unit.Name]
+		case activeUnits := <-activeUnitsChan:
+			activeList := lo.FilterMap(commandUnits[StatusCommand], func(unit string, _ int) (string, bool) {
+				return unit, activeUnits[unit]
 			})
-			err := discord.UpdateGameStatus(0, strings.Join(activeList, ","))
+			err := discord.UpdateGameStatus(0, strings.Join(activeList, ", "))
 			if err != nil {
 				log.Println("Error updating status: ", err)
 			}

@@ -1,30 +1,19 @@
 package main
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/go-test/deep"
 	"github.com/samber/lo"
 )
 
-func makeUnit(name string, permissions ...unitPermission) *systemctlUnit {
-	return &systemctlUnit{
-		Name:        name + ".service",
-		Permissions: permissions,
-	}
-}
-
-func getUnits() []*systemctlUnit {
-	return []*systemctlUnit{
-		makeUnit("000"),
-		makeUnit("001", Status),
-		makeUnit("010", Stop),
-		makeUnit("011", Stop, Status),
-		makeUnit("100", Start),
-		makeUnit("101", Start, Status),
-		makeUnit("110", Start, Stop),
-		makeUnit("111", Start, Stop, Status),
+func getBuilderTestCommandUnits() map[command][]string {
+	return map[command][]string{
+		StartCommand:   {"startable.service", "restartable.service"},
+		StopCommand:    {"stoppable.service", "restartable.service"},
+		RestartCommand: {"restartable.service"},
+		StatusCommand:  {"startable.service", "stoppable.service", "restartable.service"},
 	}
 }
 
@@ -61,44 +50,44 @@ func makeUnitOption(description string, required bool, units ...string) *discord
 }
 
 func TestGetSingleCommand(t *testing.T) {
-	commands, err := getCommands(getUnits(), Single)
+	commands, err := getCommands(getBuilderTestCommandUnits(), Single)
 
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
 
-	if diff := deep.Equal(commands, []*discordgo.ApplicationCommand{
+	if eq := reflect.DeepEqual(commands, []*discordgo.ApplicationCommand{
 		makeCommand("systemctl", "Controls units",
-			makeSubcommand("start", "Start units", makeUnitOption("The unit to start", true, "100", "101", "110", "111")),
-			makeSubcommand("stop", "Stop units", makeUnitOption("The unit to stop", true, "010", "011", "110", "111")),
-			makeSubcommand("restart", "Restart units", makeUnitOption("The unit to restart", true, "110", "111")),
-			makeSubcommand("status", "Check units' status", makeUnitOption("The unit to check", false, "001", "011", "101", "111")),
+			makeSubcommand("start", "Start units", makeUnitOption("The unit to start", true, "startable", "restartable")),
+			makeSubcommand("stop", "Stop units", makeUnitOption("The unit to stop", true, "stoppable", "restartable")),
+			makeSubcommand("restart", "Restart units", makeUnitOption("The unit to restart", true, "restartable")),
+			makeSubcommand("status", "Check units' status", makeUnitOption("The unit to check", false, "startable", "stoppable", "restartable")),
 		),
-	}); diff != nil {
-		t.Error(diff)
+	}); !eq {
+		t.Error("Not equal")
 	}
 
 }
 
 func TestMultipleCommands(t *testing.T) {
-	commands, err := getCommands(getUnits(), Multiple)
+	commands, err := getCommands(getBuilderTestCommandUnits(), Multiple)
 
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
 
-	if diff := deep.Equal(commands, []*discordgo.ApplicationCommand{
-		makeCommand("start", "Start units", makeUnitOption("The unit to start", true, "100", "101", "110", "111")),
-		makeCommand("stop", "Stop units", makeUnitOption("The unit to stop", true, "010", "011", "110", "111")),
-		makeCommand("restart", "Restart units", makeUnitOption("The unit to restart", true, "110", "111")),
-		makeCommand("status", "Check units' status", makeUnitOption("The unit to check", false, "001", "011", "101", "111")),
-	}); diff != nil {
-		t.Error(diff)
+	if eq := reflect.DeepEqual(commands, []*discordgo.ApplicationCommand{
+		makeCommand("start", "Start units", makeUnitOption("The unit to start", true, "startable", "restartable")),
+		makeCommand("stop", "Stop units", makeUnitOption("The unit to stop", true, "stoppable", "restartable")),
+		makeCommand("restart", "Restart units", makeUnitOption("The unit to restart", true, "restartable")),
+		makeCommand("status", "Check units' status", makeUnitOption("The unit to check", false, "startable", "stoppable", "restartable")),
+	}); !eq {
+		t.Error("Not equal")
 	}
 }
 
 func TestInvalidCommandType(t *testing.T) {
-	_, err := getCommands(getUnits(), "invalid")
+	_, err := getCommands(getBuilderTestCommandUnits(), "invalid")
 
 	if err.Error() != "invalid command type" {
 		t.Fatalf("Unexpected error %v", err)
