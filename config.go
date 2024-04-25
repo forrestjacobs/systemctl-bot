@@ -10,15 +10,6 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/samber/lo"
-)
-
-type unitPermission string
-
-const (
-	Start  unitPermission = "start"
-	Stop   unitPermission = "stop"
-	Status unitPermission = "status"
 )
 
 type commandType string
@@ -28,27 +19,12 @@ const (
 	Multiple commandType = "multiple"
 )
 
-type systemctlUnit struct {
-	Name        string
-	Permissions []unitPermission
-}
-
 type systemctlBotConfig struct {
 	ApplicationID uint64      `toml:"application_id"`
 	DiscordToken  string      `toml:"discord_token"`
 	GuildID       uint64      `toml:"guild_id"`
 	CommandType   commandType `toml:"command_type"`
 	Units         []*systemctlUnit
-}
-
-func (unit *systemctlUnit) HasPermissions(permissions ...unitPermission) bool {
-	return lo.Every(unit.Permissions, permissions)
-}
-
-func getUnitsWithPermissions(units []*systemctlUnit, permissions ...unitPermission) []*systemctlUnit {
-	return lo.Filter(units, func(unit *systemctlUnit, _ int) bool {
-		return unit.HasPermissions(permissions...)
-	})
 }
 
 func lookupUint64Env(key string) (uint64, bool) {
@@ -93,7 +69,7 @@ func getConfigErrors(config systemctlBotConfig) error {
 			errs = append(errs, errors.New("missing unit permissions"))
 		}
 		for _, permission := range unit.Permissions {
-			if permission != Start && permission != Stop && permission != Status {
+			if permission != StartPermission && permission != StopPermission && permission != StatusPermission {
 				errs = append(errs, errors.New("invalid unit permission"))
 			}
 		}
