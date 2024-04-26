@@ -5,6 +5,7 @@ import (
 	"os/exec"
 
 	"github.com/coreos/go-systemd/v22/dbus"
+	"github.com/samber/lo"
 )
 
 type systemd interface {
@@ -38,24 +39,32 @@ func (s *systemdImpl) getUnitActiveState(unit string) (string, error) {
 	return prop.Value.Value().(string), nil
 }
 
-func (s *systemdImpl) subscribeToActiveUnits(units []string) (<-chan map[string]bool, <-chan error) {
-	subscription := s.conn.NewSubscriptionSet()
+func subscribeToUnits(conn *dbus.Conn, units []string) *dbus.SubscriptionSet {
+	subscription := conn.NewSubscriptionSet()
 	for _, unit := range units {
 		subscription.Add(unit)
 	}
+	return subscription
+}
 
-	activeStatesChan := make(chan map[string]bool)
-	statusChan, errChan := subscription.Subscribe()
-
+func transformStatusChanToActiveList(units []string, statusChan <-chan map[string]*dbus.UnitStatus) <-chan []string {
+	activeChan := make(chan []string)
 	go func() {
 		activeStates := make(map[string]bool)
 		for statuses := range statusChan {
 			for name, status := range statuses {
 				activeStates[name] = status.ActiveState == "active"
 			}
-			activeStatesChan <- activeStates
+			activeList := lo.FilterMap(units, func(unit string, _ int) (string, bool) {
+				return unit, activeStates[unit]
+			})
+			activeChan <- activeList
 		}
 	}()
+	return activeChan
+}
 
-	return activeStatesChan, errChan
+func (s *systemdImpl) subscribeToActiveUnits(units []string) (<-chan []string, <-chan error) {
+	statusChan, errChan := subscribeToUnits(s.conn, units).Subscribe()
+	return transformStatusChanToActiveList(units, statusChan), errChan
 }
