@@ -30,7 +30,7 @@ func TestGetSingleCommandData(t *testing.T) {
 	if name != expectedName {
 		t.Fatalf("Unexpected name %v", name)
 	}
-	if eq := reflect.DeepEqual(options, expectedOptions); !eq {
+	if !reflect.DeepEqual(options, expectedOptions) {
 		t.Error("Not equal")
 	}
 }
@@ -51,7 +51,7 @@ func TestGetMultipleCommandData(t *testing.T) {
 	if name != expectedName {
 		t.Fatalf("Unexpected name %v", name)
 	}
-	if eq := reflect.DeepEqual(options, expectedOptions); !eq {
+	if !reflect.DeepEqual(options, expectedOptions) {
 		t.Error("Not equal")
 	}
 }
@@ -127,12 +127,12 @@ func TestStartHandler(t *testing.T) {
 		units: []string{"startable.service"},
 	}
 	callHandler(StartCommand, &i, makeStringOption("startable.service"))
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StartCommand}},
 		{name: "deferResponse"},
 		{name: "systemd.start", args: []any{"startable.service"}},
 		{name: "followUp", args: []any{"Started startable.service"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -143,12 +143,12 @@ func TestStartSystemdErrorHandler(t *testing.T) {
 		units:        []string{"startable.service"},
 	}
 	callHandler(StartCommand, &i, makeStringOption("startable.service"))
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StartCommand}},
 		{name: "deferResponse"},
 		{name: "systemd.start", args: []any{"startable.service"}},
 		{name: "followUp", args: []any{"could not start"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -156,10 +156,10 @@ func TestStartSystemdErrorHandler(t *testing.T) {
 func TestStartDisallowedHandler(t *testing.T) {
 	i := mockInteraction{}
 	callHandler(StartCommand, &i, makeStringOption("disallowed.service"))
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StartCommand}},
 		{name: "respond", args: []any{"command is not allowed"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -169,12 +169,12 @@ func TestStopHandler(t *testing.T) {
 		units: []string{"stoppable.service"},
 	}
 	callHandler(StopCommand, &i, makeStringOption("stoppable.service"))
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StopCommand}},
 		{name: "deferResponse"},
 		{name: "systemd.stop", args: []any{"stoppable.service"}},
 		{name: "followUp", args: []any{"Stopped stoppable.service"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -185,12 +185,12 @@ func TestStopSystemdErrorHandler(t *testing.T) {
 		units:        []string{"stoppable.service"},
 	}
 	callHandler(StopCommand, &i, makeStringOption("stoppable.service"))
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StopCommand}},
 		{name: "deferResponse"},
 		{name: "systemd.stop", args: []any{"stoppable.service"}},
 		{name: "followUp", args: []any{"could not stop"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -198,10 +198,10 @@ func TestStopSystemdErrorHandler(t *testing.T) {
 func TestStopDisallowedHandler(t *testing.T) {
 	i := mockInteraction{}
 	callHandler(StopCommand, &i, makeStringOption("disallowed.service"))
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StopCommand}},
 		{name: "respond", args: []any{"command is not allowed"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -211,12 +211,12 @@ func TestRestartHandler(t *testing.T) {
 		units: []string{"restartable.service"},
 	}
 	callHandler(RestartCommand, &i, makeStringOption("restartable.service"))
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{RestartCommand}},
 		{name: "deferResponse"},
 		{name: "systemd.restart", args: []any{"restartable.service"}},
 		{name: "followUp", args: []any{"Restarted restartable.service"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -227,12 +227,12 @@ func TestRestartSystemdErrorHandler(t *testing.T) {
 		units:        []string{"restartable.service"},
 	}
 	callHandler(RestartCommand, &i, makeStringOption("restartable.service"))
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{RestartCommand}},
 		{name: "deferResponse"},
 		{name: "systemd.restart", args: []any{"restartable.service"}},
 		{name: "followUp", args: []any{"could not restart"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -240,10 +240,10 @@ func TestRestartSystemdErrorHandler(t *testing.T) {
 func TestRestartDisallowedHandler(t *testing.T) {
 	i := mockInteraction{}
 	callHandler(RestartCommand, &i, makeStringOption("disallowed.service"))
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{RestartCommand}},
 		{name: "respond", args: []any{"command is not allowed"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -253,13 +253,13 @@ func TestMultiStatusHandler(t *testing.T) {
 		units: []string{"active.service", "reloading.service", "inactive.service"},
 	}
 	callHandler(StatusCommand, &i)
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
 		{name: "systemd.getUnitActiveState", args: []any{"active.service"}},
 		{name: "systemd.getUnitActiveState", args: []any{"reloading.service"}},
 		{name: "systemd.getUnitActiveState", args: []any{"inactive.service"}},
 		{name: "respond", args: []any{"active.service: active\nreloading.service: reloading"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -270,11 +270,11 @@ func TestMultiStatusSystemdErrorHandler(t *testing.T) {
 		units:        []string{"active.service"},
 	}
 	callHandler(StatusCommand, &i)
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
 		{name: "systemd.getUnitActiveState", args: []any{"active.service"}},
 		{name: "respond", args: []any{"active.service: error getting status"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -284,11 +284,11 @@ func TestNoneActiveStatusHandler(t *testing.T) {
 		units: []string{"inactive.service"},
 	}
 	callHandler(StatusCommand, &i)
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
 		{name: "systemd.getUnitActiveState", args: []any{"inactive.service"}},
 		{name: "respond", args: []any{"Nothing is active"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -298,11 +298,11 @@ func TestUnitStatusHandler(t *testing.T) {
 		units: []string{"reloading.service"},
 	}
 	callHandler(StatusCommand, &i, makeStringOption("reloading.service"))
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
 		{name: "systemd.getUnitActiveState", args: []any{"reloading.service"}},
 		{name: "respond", args: []any{"reloading"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -313,11 +313,11 @@ func TestUnitStatusSystemdErrorHandler(t *testing.T) {
 		units:        []string{"reloading.service"},
 	}
 	callHandler(StatusCommand, &i, makeStringOption("reloading.service"))
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
 		{name: "systemd.getUnitActiveState", args: []any{"reloading.service"}},
 		{name: "respond", args: []any{"could not get status"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -325,10 +325,10 @@ func TestUnitStatusSystemdErrorHandler(t *testing.T) {
 func TestDisallowedUnitStatusHandler(t *testing.T) {
 	i := mockInteraction{}
 	callHandler(StatusCommand, &i, makeStringOption("disallowed.service"))
-	if eq := reflect.DeepEqual(i.calls, []mockCall{
+	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
 		{name: "respond", args: []any{"command is not allowed"}},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }

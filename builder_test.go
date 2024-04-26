@@ -56,14 +56,14 @@ func TestGetSingleCommand(t *testing.T) {
 		t.Fatalf("Unexpected error %v", err)
 	}
 
-	if eq := reflect.DeepEqual(commands, []*discordgo.ApplicationCommand{
+	if !reflect.DeepEqual(commands, []*discordgo.ApplicationCommand{
 		makeCommand("systemctl", "Controls units",
 			makeSubcommand("start", "Start units", makeUnitOption("The unit to start", true, "startable", "restartable")),
 			makeSubcommand("stop", "Stop units", makeUnitOption("The unit to stop", true, "stoppable", "restartable")),
 			makeSubcommand("restart", "Restart units", makeUnitOption("The unit to restart", true, "restartable")),
 			makeSubcommand("status", "Check units' status", makeUnitOption("The unit to check", false, "startable", "stoppable", "restartable")),
 		),
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 
@@ -76,12 +76,12 @@ func TestMultipleCommands(t *testing.T) {
 		t.Fatalf("Unexpected error %v", err)
 	}
 
-	if eq := reflect.DeepEqual(commands, []*discordgo.ApplicationCommand{
+	if !reflect.DeepEqual(commands, []*discordgo.ApplicationCommand{
 		makeCommand("start", "Start units", makeUnitOption("The unit to start", true, "startable", "restartable")),
 		makeCommand("stop", "Stop units", makeUnitOption("The unit to stop", true, "stoppable", "restartable")),
 		makeCommand("restart", "Restart units", makeUnitOption("The unit to restart", true, "restartable")),
 		makeCommand("status", "Check units' status", makeUnitOption("The unit to check", false, "startable", "stoppable", "restartable")),
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
