@@ -65,7 +65,6 @@ type mockInteraction struct {
 	calls        []mockCall
 	systemdError error
 	units        []string
-	option       string
 }
 
 func (i *mockInteraction) start(unit string) error {
@@ -97,10 +96,6 @@ func (i *mockInteraction) getUnits(command command) []string {
 	return i.units
 }
 
-func (i *mockInteraction) getOptionStringValue(index int) string {
-	return i.option
-}
-
 func (i *mockInteraction) respond(content string) error {
 	i.calls = append(i.calls, mockCall{name: "respond", args: []any{content}})
 	return nil
@@ -116,12 +111,22 @@ func (i *mockInteraction) followUp(content string) error {
 	return nil
 }
 
+func makeStringOption(v string) *discordgo.ApplicationCommandInteractionDataOption {
+	return &discordgo.ApplicationCommandInteractionDataOption{
+		Type:  discordgo.ApplicationCommandOptionString,
+		Value: v,
+	}
+}
+
+func callHandler(command command, i interaction, options ...*discordgo.ApplicationCommandInteractionDataOption) {
+	commandHandlers[command](i, options)
+}
+
 func TestStartHandler(t *testing.T) {
 	i := mockInteraction{
-		units:  []string{"startable.service"},
-		option: "startable.service",
+		units: []string{"startable.service"},
 	}
-	commandHandlers[StartCommand](&i)
+	callHandler(StartCommand, &i, makeStringOption("startable.service"))
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StartCommand}},
 		{name: "deferResponse"},
@@ -136,9 +141,8 @@ func TestStartSystemdErrorHandler(t *testing.T) {
 	i := mockInteraction{
 		systemdError: errors.New("could not start"),
 		units:        []string{"startable.service"},
-		option:       "startable.service",
 	}
-	commandHandlers[StartCommand](&i)
+	callHandler(StartCommand, &i, makeStringOption("startable.service"))
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StartCommand}},
 		{name: "deferResponse"},
@@ -150,10 +154,8 @@ func TestStartSystemdErrorHandler(t *testing.T) {
 }
 
 func TestStartDisallowedHandler(t *testing.T) {
-	i := mockInteraction{
-		option: "disallowed.service",
-	}
-	commandHandlers[StartCommand](&i)
+	i := mockInteraction{}
+	callHandler(StartCommand, &i, makeStringOption("disallowed.service"))
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StartCommand}},
 		{name: "respond", args: []any{"command is not allowed"}},
@@ -164,10 +166,9 @@ func TestStartDisallowedHandler(t *testing.T) {
 
 func TestStopHandler(t *testing.T) {
 	i := mockInteraction{
-		units:  []string{"stoppable.service"},
-		option: "stoppable.service",
+		units: []string{"stoppable.service"},
 	}
-	commandHandlers[StopCommand](&i)
+	callHandler(StopCommand, &i, makeStringOption("stoppable.service"))
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StopCommand}},
 		{name: "deferResponse"},
@@ -182,9 +183,8 @@ func TestStopSystemdErrorHandler(t *testing.T) {
 	i := mockInteraction{
 		systemdError: errors.New("could not stop"),
 		units:        []string{"stoppable.service"},
-		option:       "stoppable.service",
 	}
-	commandHandlers[StopCommand](&i)
+	callHandler(StopCommand, &i, makeStringOption("stoppable.service"))
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StopCommand}},
 		{name: "deferResponse"},
@@ -196,10 +196,8 @@ func TestStopSystemdErrorHandler(t *testing.T) {
 }
 
 func TestStopDisallowedHandler(t *testing.T) {
-	i := mockInteraction{
-		option: "disallowed.service",
-	}
-	commandHandlers[StopCommand](&i)
+	i := mockInteraction{}
+	callHandler(StopCommand, &i, makeStringOption("disallowed.service"))
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StopCommand}},
 		{name: "respond", args: []any{"command is not allowed"}},
@@ -210,10 +208,9 @@ func TestStopDisallowedHandler(t *testing.T) {
 
 func TestRestartHandler(t *testing.T) {
 	i := mockInteraction{
-		units:  []string{"restartable.service"},
-		option: "restartable.service",
+		units: []string{"restartable.service"},
 	}
-	commandHandlers[RestartCommand](&i)
+	callHandler(RestartCommand, &i, makeStringOption("restartable.service"))
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{RestartCommand}},
 		{name: "deferResponse"},
@@ -228,9 +225,8 @@ func TestRestartSystemdErrorHandler(t *testing.T) {
 	i := mockInteraction{
 		systemdError: errors.New("could not restart"),
 		units:        []string{"restartable.service"},
-		option:       "restartable.service",
 	}
-	commandHandlers[RestartCommand](&i)
+	callHandler(RestartCommand, &i, makeStringOption("restartable.service"))
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{RestartCommand}},
 		{name: "deferResponse"},
@@ -242,10 +238,8 @@ func TestRestartSystemdErrorHandler(t *testing.T) {
 }
 
 func TestRestartDisallowedHandler(t *testing.T) {
-	i := mockInteraction{
-		option: "disallowed.service",
-	}
-	commandHandlers[RestartCommand](&i)
+	i := mockInteraction{}
+	callHandler(RestartCommand, &i, makeStringOption("disallowed.service"))
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{RestartCommand}},
 		{name: "respond", args: []any{"command is not allowed"}},
@@ -258,7 +252,7 @@ func TestMultiStatusHandler(t *testing.T) {
 	i := mockInteraction{
 		units: []string{"active.service", "reloading.service", "inactive.service"},
 	}
-	commandHandlers[StatusCommand](&i)
+	callHandler(StatusCommand, &i)
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
 		{name: "systemd.getUnitActiveState", args: []any{"active.service"}},
@@ -275,7 +269,7 @@ func TestMultiStatusSystemdErrorHandler(t *testing.T) {
 		systemdError: errors.New("could not get status"),
 		units:        []string{"active.service"},
 	}
-	commandHandlers[StatusCommand](&i)
+	callHandler(StatusCommand, &i)
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
 		{name: "systemd.getUnitActiveState", args: []any{"active.service"}},
@@ -289,7 +283,7 @@ func TestNoneActiveStatusHandler(t *testing.T) {
 	i := mockInteraction{
 		units: []string{"inactive.service"},
 	}
-	commandHandlers[StatusCommand](&i)
+	callHandler(StatusCommand, &i)
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
 		{name: "systemd.getUnitActiveState", args: []any{"inactive.service"}},
@@ -301,10 +295,9 @@ func TestNoneActiveStatusHandler(t *testing.T) {
 
 func TestUnitStatusHandler(t *testing.T) {
 	i := mockInteraction{
-		units:  []string{"reloading.service"},
-		option: "reloading.service",
+		units: []string{"reloading.service"},
 	}
-	commandHandlers[StatusCommand](&i)
+	callHandler(StatusCommand, &i, makeStringOption("reloading.service"))
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
 		{name: "systemd.getUnitActiveState", args: []any{"reloading.service"}},
@@ -318,9 +311,8 @@ func TestUnitStatusSystemdErrorHandler(t *testing.T) {
 	i := mockInteraction{
 		systemdError: errors.New("could not get status"),
 		units:        []string{"reloading.service"},
-		option:       "reloading.service",
 	}
-	commandHandlers[StatusCommand](&i)
+	callHandler(StatusCommand, &i, makeStringOption("reloading.service"))
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
 		{name: "systemd.getUnitActiveState", args: []any{"reloading.service"}},
@@ -331,10 +323,8 @@ func TestUnitStatusSystemdErrorHandler(t *testing.T) {
 }
 
 func TestDisallowedUnitStatusHandler(t *testing.T) {
-	i := mockInteraction{
-		option: "disallowed.service",
-	}
-	commandHandlers[StatusCommand](&i)
+	i := mockInteraction{}
+	callHandler(StatusCommand, &i, makeStringOption("disallowed.service"))
 	if eq := reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
 		{name: "respond", args: []any{"command is not allowed"}},
