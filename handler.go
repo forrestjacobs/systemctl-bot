@@ -12,7 +12,6 @@ import (
 type interaction interface {
 	getSystemd() systemd
 	getUnits(command command) []string
-	getOptionStringValue(index int) string
 	respond(content string) error
 	deferResponse() error
 	followUp(content string) error
@@ -23,7 +22,6 @@ type interactionStruct struct {
 	commandUnits map[command][]string
 	session      *discordgo.Session
 	interaction  *discordgo.InteractionCreate
-	options      []*discordgo.ApplicationCommandInteractionDataOption
 }
 
 func (i *interactionStruct) getSystemd() systemd {
@@ -32,13 +30,6 @@ func (i *interactionStruct) getSystemd() systemd {
 
 func (i *interactionStruct) getUnits(command command) []string {
 	return i.commandUnits[command]
-}
-
-func (i *interactionStruct) getOptionStringValue(index int) string {
-	if len(i.options) < index {
-		return ""
-	}
-	return i.options[index].StringValue()
 }
 
 func (i *interactionStruct) respond(content string) error {
@@ -79,34 +70,33 @@ func getContent(success string, err error) string {
 	}
 }
 
-var commandHandlers = map[command]func(i interaction){
-	StartCommand: func(i interaction) {
-		unit := i.getOptionStringValue(0)
+var commandHandlers = map[command]func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption){
+	StartCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
+		unit := options[0].StringValue()
 		if checkAllowed(i, StartCommand, unit) && i.deferResponse() == nil {
 			err := i.getSystemd().start(unit)
 			i.followUp(getContent("Started "+unit, err))
 		}
 	},
 
-	StopCommand: func(i interaction) {
-		unit := i.getOptionStringValue(0)
+	StopCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
+		unit := options[0].StringValue()
 		if checkAllowed(i, StopCommand, unit) && i.deferResponse() == nil {
 			err := i.getSystemd().stop(unit)
 			i.followUp(getContent("Stopped "+unit, err))
 		}
 	},
 
-	RestartCommand: func(i interaction) {
-		unit := i.getOptionStringValue(0)
+	RestartCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
+		unit := options[0].StringValue()
 		if checkAllowed(i, RestartCommand, unit) && i.deferResponse() == nil {
 			err := i.getSystemd().restart(unit)
 			i.followUp(getContent("Restarted "+unit, err))
 		}
 	},
 
-	StatusCommand: func(i interaction) {
-		unit := i.getOptionStringValue(0)
-		if unit == "" {
+	StatusCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
+		if len(options) == 0 {
 			lines := lo.FilterMap(i.getUnits(StatusCommand), func(unit string, _ int) (string, bool) {
 				val, err := i.getSystemd().getUnitActiveState(unit)
 				if err != nil {
@@ -122,7 +112,7 @@ var commandHandlers = map[command]func(i interaction){
 				i.respond(strings.Join(lines, "\n"))
 			}
 		} else {
-			unit := i.getOptionStringValue(0)
+			unit := options[0].StringValue()
 			if checkAllowed(i, StatusCommand, unit) {
 				i.respond(getContent(i.getSystemd().getUnitActiveState(unit)))
 			}
@@ -152,8 +142,7 @@ func makeInteractionHandler(commandUnits map[command][]string, systemd systemd) 
 				systemd:      systemd,
 				session:      session,
 				interaction:  interaction,
-				options:      options,
-			})
+			}, options)
 		}
 	}
 }
