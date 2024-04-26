@@ -9,7 +9,6 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/coreos/go-systemd/v22/dbus"
-	"github.com/samber/lo"
 )
 
 type exitErrorCode int
@@ -62,10 +61,7 @@ func main() {
 	for {
 		select {
 		case activeUnits := <-activeUnitsChan:
-			activeList := lo.FilterMap(commandUnits[StatusCommand], func(unit string, _ int) (string, bool) {
-				return unit, activeUnits[unit]
-			})
-			err := discord.UpdateGameStatus(0, strings.Join(activeList, ", "))
+			err := discord.UpdateGameStatus(0, strings.Join(activeUnits, ", "))
 			if err != nil {
 				log.Println("Error updating status: ", err)
 			}
