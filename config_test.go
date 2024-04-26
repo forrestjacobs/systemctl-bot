@@ -39,7 +39,7 @@ func TestReadConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
-	if eq := reflect.DeepEqual(config, getBaseConfig()); !eq {
+	if !reflect.DeepEqual(config, getBaseConfig()) {
 		t.Error("Not equal")
 	}
 }
@@ -53,7 +53,7 @@ func TestReadConfigWithInvalidEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
-	if eq := reflect.DeepEqual(config, getBaseConfig()); !eq {
+	if !reflect.DeepEqual(config, getBaseConfig()) {
 		t.Error("Not equal")
 	}
 }
@@ -69,13 +69,13 @@ func TestReadConfigWithEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
-	if eq := reflect.DeepEqual(config, systemctlBotConfig{
+	if !reflect.DeepEqual(config, systemctlBotConfig{
 		ApplicationID: 10,
 		GuildID:       20,
 		DiscordToken:  "Z",
 		CommandType:   Multiple,
 		Units:         getBaseConfig().Units,
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
@@ -98,7 +98,7 @@ func TestReadConfigSuppliesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
-	if eq := reflect.DeepEqual(config, systemctlBotConfig{
+	if !reflect.DeepEqual(config, systemctlBotConfig{
 		ApplicationID: 1,
 		GuildID:       2,
 		DiscordToken:  "a",
@@ -113,7 +113,7 @@ func TestReadConfigSuppliesDefaults(t *testing.T) {
 				Permissions: []unitPermission{StatusPermission},
 			},
 		},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }

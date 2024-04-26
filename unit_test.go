@@ -24,12 +24,12 @@ func TestGetCommandUnits(t *testing.T) {
 			Permissions: []unitPermission{StartPermission, StopPermission, StatusPermission},
 		},
 	})
-	if eq := reflect.DeepEqual(commandUnits, map[command][]string{
+	if !reflect.DeepEqual(commandUnits, map[command][]string{
 		StartCommand:   {"startable.service", "restartable.service"},
 		StopCommand:    {"stoppable.service", "restartable.service"},
 		RestartCommand: {"restartable.service"},
 		StatusCommand:  {"startable.service", "stoppable.service", "restartable.service"},
-	}); !eq {
+	}) {
 		t.Error("Not equal")
 	}
 }
