@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"log"
 	"slices"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/samber/lo"
 )
 
@@ -13,6 +15,13 @@ func logError(err error) {
 	if err != nil {
 		log.Println(err)
 	}
+}
+
+type systemd interface {
+	StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
+	StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
+	RestartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
+	GetUnitPropertyContext(ctx context.Context, unit string, propertyName string) (*dbus.Property, error)
 }
 
 type interaction interface {
@@ -88,7 +97,8 @@ var commandHandlers = map[command]func(i interaction, options []*discordgo.Appli
 	StartCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		unit := options[0].StringValue()
 		if checkAllowed(i, StartCommand, unit) && i.deferResponse() {
-			resultChan, err := i.getSystemd().start(unit)
+			resultChan := make(chan string)
+			_, err := i.getSystemd().StartUnitContext(context.Background(), unit, "replace", resultChan)
 			i.followUp(getSystemdResponse("Started "+unit, resultChan, err))
 		}
 	},
@@ -96,7 +106,8 @@ var commandHandlers = map[command]func(i interaction, options []*discordgo.Appli
 	StopCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		unit := options[0].StringValue()
 		if checkAllowed(i, StopCommand, unit) && i.deferResponse() {
-			resultChan, err := i.getSystemd().stop(unit)
+			resultChan := make(chan string)
+			_, err := i.getSystemd().StopUnitContext(context.Background(), unit, "replace", resultChan)
 			i.followUp(getSystemdResponse("Stopped "+unit, resultChan, err))
 		}
 	},
@@ -104,7 +115,8 @@ var commandHandlers = map[command]func(i interaction, options []*discordgo.Appli
 	RestartCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		unit := options[0].StringValue()
 		if checkAllowed(i, RestartCommand, unit) && i.deferResponse() {
-			resultChan, err := i.getSystemd().restart(unit)
+			resultChan := make(chan string)
+			_, err := i.getSystemd().RestartUnitContext(context.Background(), unit, "replace", resultChan)
 			i.followUp(getSystemdResponse("Restarted "+unit, resultChan, err))
 		}
 	},
@@ -112,11 +124,12 @@ var commandHandlers = map[command]func(i interaction, options []*discordgo.Appli
 	StatusCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		if len(options) == 0 {
 			lines := lo.FilterMap(i.getUnits(StatusCommand), func(unit string, _ int) (string, bool) {
-				val, err := i.getSystemd().getUnitActiveState(unit)
+				prop, err := i.getSystemd().GetUnitPropertyContext(context.Background(), unit, "ActiveState")
 				if err != nil {
 					log.Println("Error fetching unit state: ", err)
 					return unit + ": error getting status", true
 				}
+				val := prop.Value.Value().(string)
 				return unit + ": " + val, val != "inactive"
 			})
 
@@ -128,11 +141,11 @@ var commandHandlers = map[command]func(i interaction, options []*discordgo.Appli
 		} else {
 			unit := options[0].StringValue()
 			if checkAllowed(i, StatusCommand, unit) {
-				activeState, err := i.getSystemd().getUnitActiveState(unit)
+				prop, err := i.getSystemd().GetUnitPropertyContext(context.Background(), unit, "ActiveState")
 				if err != nil {
 					i.respond(err.Error())
 				} else {
-					i.respond(activeState)
+					i.respond(prop.Value.Value().(string))
 				}
 			}
 		}

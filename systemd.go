@@ -1,48 +1,9 @@
 package main
 
 import (
-	"context"
-
 	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/samber/lo"
 )
-
-type systemd interface {
-	start(unit string) (<-chan string, error)
-	stop(unit string) (<-chan string, error)
-	restart(unit string) (<-chan string, error)
-	getUnitActiveState(unit string) (string, error)
-}
-
-type systemdImpl struct {
-	conn *dbus.Conn
-}
-
-func (s *systemdImpl) start(unit string) (<-chan string, error) {
-	resultChan := make(chan string)
-	_, err := s.conn.StartUnitContext(context.Background(), unit, "replace", resultChan)
-	return resultChan, err
-}
-
-func (s *systemdImpl) stop(unit string) (<-chan string, error) {
-	resultChan := make(chan string)
-	_, err := s.conn.StopUnitContext(context.Background(), unit, "replace", resultChan)
-	return resultChan, err
-}
-
-func (s *systemdImpl) restart(unit string) (<-chan string, error) {
-	resultChan := make(chan string)
-	_, err := s.conn.RestartUnitContext(context.Background(), unit, "replace", resultChan)
-	return resultChan, err
-}
-
-func (s *systemdImpl) getUnitActiveState(unit string) (string, error) {
-	prop, err := s.conn.GetUnitPropertyContext(context.Background(), unit, "ActiveState")
-	if err != nil {
-		return "", err
-	}
-	return prop.Value.Value().(string), nil
-}
 
 func subscribeToUnits(conn *dbus.Conn, units []string) *dbus.SubscriptionSet {
 	subscription := conn.NewSubscriptionSet()
@@ -69,7 +30,7 @@ func transformStatusChanToActiveList(units []string, statusChan <-chan map[strin
 	return activeChan
 }
 
-func (s *systemdImpl) subscribeToActiveUnits(units []string) (<-chan []string, <-chan error) {
-	statusChan, errChan := subscribeToUnits(s.conn, units).Subscribe()
+func subscribeToActiveUnits(conn *dbus.Conn, units []string) (<-chan []string, <-chan error) {
+	statusChan, errChan := subscribeToUnits(conn, units).Subscribe()
 	return transformStatusChanToActiveList(units, statusChan), errChan
 }
