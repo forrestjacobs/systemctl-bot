@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/coreos/go-systemd/v22/dbus"
+	godbus "github.com/godbus/dbus/v5"
 )
 
 func TestGetSingleCommandData(t *testing.T) {
@@ -67,34 +70,39 @@ type mockInteraction struct {
 	units        []string
 }
 
-func (i *mockInteraction) makeMockSystemdCallChan() <-chan string {
-	c := make(chan string, 1)
-	if i.systemdError == nil {
-		c <- "done"
-	} else {
-		c <- "failed"
+func (s *mockInteraction) handleUnitCommand(funcName string, unitName string, mode string, ch chan<- string) (int, error) {
+	s.calls = append(s.calls, mockCall{name: "systemd." + funcName, args: []any{unitName, mode}})
+	go func() {
+		if s.systemdError == nil {
+			ch <- "done"
+		} else {
+			ch <- "failed"
+		}
+	}()
+	return 0, s.systemdError
+}
+
+func (s *mockInteraction) StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error) {
+	return s.handleUnitCommand("StartUnitContext", name, mode, ch)
+}
+
+func (s *mockInteraction) StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error) {
+	return s.handleUnitCommand("StopUnitContext", name, mode, ch)
+}
+
+func (s *mockInteraction) RestartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error) {
+	return s.handleUnitCommand("RestartUnitContext", name, mode, ch)
+}
+
+func (s *mockInteraction) GetUnitPropertyContext(ctx context.Context, unit string, propertyName string) (*dbus.Property, error) {
+	s.calls = append(s.calls, mockCall{name: "systemd.GetUnitPropertyContext", args: []any{unit, propertyName}})
+	if s.systemdError != nil {
+		return nil, s.systemdError
 	}
-	return c
-}
-
-func (i *mockInteraction) start(unit string) (<-chan string, error) {
-	i.calls = append(i.calls, mockCall{name: "systemd.start", args: []any{unit}})
-	return i.makeMockSystemdCallChan(), i.systemdError
-}
-
-func (i *mockInteraction) stop(unit string) (<-chan string, error) {
-	i.calls = append(i.calls, mockCall{name: "systemd.stop", args: []any{unit}})
-	return i.makeMockSystemdCallChan(), i.systemdError
-}
-
-func (i *mockInteraction) restart(unit string) (<-chan string, error) {
-	i.calls = append(i.calls, mockCall{name: "systemd.restart", args: []any{unit}})
-	return i.makeMockSystemdCallChan(), i.systemdError
-}
-
-func (i *mockInteraction) getUnitActiveState(unit string) (string, error) {
-	i.calls = append(i.calls, mockCall{name: "systemd.getUnitActiveState", args: []any{unit}})
-	return strings.TrimSuffix(unit, ".service"), i.systemdError
+	return &dbus.Property{
+		Name:  propertyName,
+		Value: godbus.MakeVariant(strings.TrimSuffix(unit, ".service")),
+	}, nil
 }
 
 func (i *mockInteraction) getSystemd() systemd {
@@ -138,7 +146,7 @@ func TestStartHandler(t *testing.T) {
 	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StartCommand}},
 		{name: "deferResponse"},
-		{name: "systemd.start", args: []any{"startable.service"}},
+		{name: "systemd.StartUnitContext", args: []any{"startable.service", "replace"}},
 		{name: "followUp", args: []any{"Started startable.service"}},
 	}) {
 		t.Error("Not equal")
@@ -154,7 +162,7 @@ func TestStartSystemdErrorHandler(t *testing.T) {
 	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StartCommand}},
 		{name: "deferResponse"},
-		{name: "systemd.start", args: []any{"startable.service"}},
+		{name: "systemd.StartUnitContext", args: []any{"startable.service", "replace"}},
 		{name: "followUp", args: []any{"could not start"}},
 	}) {
 		t.Error("Not equal")
@@ -180,7 +188,7 @@ func TestStopHandler(t *testing.T) {
 	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StopCommand}},
 		{name: "deferResponse"},
-		{name: "systemd.stop", args: []any{"stoppable.service"}},
+		{name: "systemd.StopUnitContext", args: []any{"stoppable.service", "replace"}},
 		{name: "followUp", args: []any{"Stopped stoppable.service"}},
 	}) {
 		t.Error("Not equal")
@@ -196,7 +204,7 @@ func TestStopSystemdErrorHandler(t *testing.T) {
 	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StopCommand}},
 		{name: "deferResponse"},
-		{name: "systemd.stop", args: []any{"stoppable.service"}},
+		{name: "systemd.StopUnitContext", args: []any{"stoppable.service", "replace"}},
 		{name: "followUp", args: []any{"could not stop"}},
 	}) {
 		t.Error("Not equal")
@@ -222,7 +230,7 @@ func TestRestartHandler(t *testing.T) {
 	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{RestartCommand}},
 		{name: "deferResponse"},
-		{name: "systemd.restart", args: []any{"restartable.service"}},
+		{name: "systemd.RestartUnitContext", args: []any{"restartable.service", "replace"}},
 		{name: "followUp", args: []any{"Restarted restartable.service"}},
 	}) {
 		t.Error("Not equal")
@@ -238,7 +246,7 @@ func TestRestartSystemdErrorHandler(t *testing.T) {
 	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{RestartCommand}},
 		{name: "deferResponse"},
-		{name: "systemd.restart", args: []any{"restartable.service"}},
+		{name: "systemd.RestartUnitContext", args: []any{"restartable.service", "replace"}},
 		{name: "followUp", args: []any{"could not restart"}},
 	}) {
 		t.Error("Not equal")
@@ -263,9 +271,9 @@ func TestMultiStatusHandler(t *testing.T) {
 	callHandler(StatusCommand, &i)
 	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
-		{name: "systemd.getUnitActiveState", args: []any{"active.service"}},
-		{name: "systemd.getUnitActiveState", args: []any{"reloading.service"}},
-		{name: "systemd.getUnitActiveState", args: []any{"inactive.service"}},
+		{name: "systemd.GetUnitPropertyContext", args: []any{"active.service", "ActiveState"}},
+		{name: "systemd.GetUnitPropertyContext", args: []any{"reloading.service", "ActiveState"}},
+		{name: "systemd.GetUnitPropertyContext", args: []any{"inactive.service", "ActiveState"}},
 		{name: "respond", args: []any{"active.service: active\nreloading.service: reloading"}},
 	}) {
 		t.Error("Not equal")
@@ -280,7 +288,7 @@ func TestMultiStatusSystemdErrorHandler(t *testing.T) {
 	callHandler(StatusCommand, &i)
 	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
-		{name: "systemd.getUnitActiveState", args: []any{"active.service"}},
+		{name: "systemd.GetUnitPropertyContext", args: []any{"active.service", "ActiveState"}},
 		{name: "respond", args: []any{"active.service: error getting status"}},
 	}) {
 		t.Error("Not equal")
@@ -294,7 +302,7 @@ func TestNoneActiveStatusHandler(t *testing.T) {
 	callHandler(StatusCommand, &i)
 	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
-		{name: "systemd.getUnitActiveState", args: []any{"inactive.service"}},
+		{name: "systemd.GetUnitPropertyContext", args: []any{"inactive.service", "ActiveState"}},
 		{name: "respond", args: []any{"Nothing is active"}},
 	}) {
 		t.Error("Not equal")
@@ -308,7 +316,7 @@ func TestUnitStatusHandler(t *testing.T) {
 	callHandler(StatusCommand, &i, makeStringOption("reloading.service"))
 	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
-		{name: "systemd.getUnitActiveState", args: []any{"reloading.service"}},
+		{name: "systemd.GetUnitPropertyContext", args: []any{"reloading.service", "ActiveState"}},
 		{name: "respond", args: []any{"reloading"}},
 	}) {
 		t.Error("Not equal")
@@ -323,7 +331,7 @@ func TestUnitStatusSystemdErrorHandler(t *testing.T) {
 	callHandler(StatusCommand, &i, makeStringOption("reloading.service"))
 	if !reflect.DeepEqual(i.calls, []mockCall{
 		{name: "getUnits", args: []any{StatusCommand}},
-		{name: "systemd.getUnitActiveState", args: []any{"reloading.service"}},
+		{name: "systemd.GetUnitPropertyContext", args: []any{"reloading.service", "ActiveState"}},
 		{name: "respond", args: []any{"could not get status"}},
 	}) {
 		t.Error("Not equal")

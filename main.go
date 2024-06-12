@@ -42,12 +42,11 @@ func main() {
 	conn, err := dbus.NewSystemdConnectionContext(context.Background())
 	dieOnError(err, SystemdOpenConnectionError)
 	defer conn.Close()
-	systemd := systemdImpl{conn: conn}
 
 	discord, err := discordgo.New("Bot " + config.DiscordToken)
 	dieOnError(err, DiscordCreateSessionError)
 
-	discord.AddHandler(makeInteractionHandler(commandUnits, &systemd))
+	discord.AddHandler(makeInteractionHandler(commandUnits, conn))
 	dieOnError(discord.Open(), DiscordOpenConnectionError)
 	defer discord.Close()
 
@@ -56,7 +55,7 @@ func main() {
 	_, err = discord.ApplicationCommandBulkOverwrite(applicationID, guildID, commands)
 	dieOnError(err, DiscordSetCommandError)
 
-	activeUnitsChan, errChan := systemd.subscribeToActiveUnits(commandUnits[StatusCommand])
+	activeUnitsChan, errChan := subscribeToActiveUnits(conn, commandUnits[StatusCommand])
 
 	for {
 		select {
