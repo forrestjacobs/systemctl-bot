@@ -62,36 +62,41 @@ func checkAllowed(i interaction, command command, value string) bool {
 	return allowed
 }
 
-func getContent(success string, err error) string {
+func getSystemdResponse(doneString string, resultChan <-chan string, err error) string {
 	if err != nil {
 		return err.Error()
-	} else {
-		return success
 	}
+
+	result := <-resultChan
+	if result == "done" {
+		return doneString
+	}
+
+	return result
 }
 
 var commandHandlers = map[command]func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption){
 	StartCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		unit := options[0].StringValue()
 		if checkAllowed(i, StartCommand, unit) && i.deferResponse() == nil {
-			err := i.getSystemd().start(unit)
-			i.followUp(getContent("Started "+unit, err))
+			resultChan, err := i.getSystemd().start(unit)
+			i.followUp(getSystemdResponse("Started "+unit, resultChan, err))
 		}
 	},
 
 	StopCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		unit := options[0].StringValue()
 		if checkAllowed(i, StopCommand, unit) && i.deferResponse() == nil {
-			err := i.getSystemd().stop(unit)
-			i.followUp(getContent("Stopped "+unit, err))
+			resultChan, err := i.getSystemd().stop(unit)
+			i.followUp(getSystemdResponse("Stopped "+unit, resultChan, err))
 		}
 	},
 
 	RestartCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		unit := options[0].StringValue()
 		if checkAllowed(i, RestartCommand, unit) && i.deferResponse() == nil {
-			err := i.getSystemd().restart(unit)
-			i.followUp(getContent("Restarted "+unit, err))
+			resultChan, err := i.getSystemd().restart(unit)
+			i.followUp(getSystemdResponse("Restarted "+unit, resultChan, err))
 		}
 	},
 
@@ -114,7 +119,12 @@ var commandHandlers = map[command]func(i interaction, options []*discordgo.Appli
 		} else {
 			unit := options[0].StringValue()
 			if checkAllowed(i, StatusCommand, unit) {
-				i.respond(getContent(i.getSystemd().getUnitActiveState(unit)))
+				activeState, err := i.getSystemd().getUnitActiveState(unit)
+				if err != nil {
+					i.respond(err.Error())
+				} else {
+					i.respond(activeState)
+				}
 			}
 		}
 	},

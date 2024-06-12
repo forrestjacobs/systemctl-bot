@@ -67,19 +67,29 @@ type mockInteraction struct {
 	units        []string
 }
 
-func (i *mockInteraction) start(unit string) error {
+func (i *mockInteraction) makeMockSystemdCallChan() <-chan string {
+	c := make(chan string, 1)
+	if i.systemdError == nil {
+		c <- "done"
+	} else {
+		c <- "failed"
+	}
+	return c
+}
+
+func (i *mockInteraction) start(unit string) (<-chan string, error) {
 	i.calls = append(i.calls, mockCall{name: "systemd.start", args: []any{unit}})
-	return i.systemdError
+	return i.makeMockSystemdCallChan(), i.systemdError
 }
 
-func (i *mockInteraction) stop(unit string) error {
+func (i *mockInteraction) stop(unit string) (<-chan string, error) {
 	i.calls = append(i.calls, mockCall{name: "systemd.stop", args: []any{unit}})
-	return i.systemdError
+	return i.makeMockSystemdCallChan(), i.systemdError
 }
 
-func (i *mockInteraction) restart(unit string) error {
+func (i *mockInteraction) restart(unit string) (<-chan string, error) {
 	i.calls = append(i.calls, mockCall{name: "systemd.restart", args: []any{unit}})
-	return i.systemdError
+	return i.makeMockSystemdCallChan(), i.systemdError
 }
 
 func (i *mockInteraction) getUnitActiveState(unit string) (string, error) {
