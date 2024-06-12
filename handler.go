@@ -9,12 +9,18 @@ import (
 	"github.com/samber/lo"
 )
 
+func logError(err error) {
+	if err != nil {
+		log.Println(err)
+	}
+}
+
 type interaction interface {
 	getSystemd() systemd
 	getUnits(command command) []string
-	respond(content string) error
-	deferResponse() error
-	followUp(content string) error
+	respond(content string)
+	deferResponse() bool
+	followUp(content string)
 }
 
 type interactionStruct struct {
@@ -32,26 +38,29 @@ func (i *interactionStruct) getUnits(command command) []string {
 	return i.commandUnits[command]
 }
 
-func (i *interactionStruct) respond(content string) error {
-	return i.session.InteractionRespond(i.interaction.Interaction, &discordgo.InteractionResponse{
+func (i *interactionStruct) respond(content string) {
+	err := i.session.InteractionRespond(i.interaction.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: content,
 		},
 	})
+	logError(err)
 }
 
-func (i *interactionStruct) deferResponse() error {
-	return i.session.InteractionRespond(i.interaction.Interaction, &discordgo.InteractionResponse{
+func (i *interactionStruct) deferResponse() bool {
+	err := i.session.InteractionRespond(i.interaction.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 	})
+	logError(err)
+	return err == nil
 }
 
-func (i *interactionStruct) followUp(content string) error {
+func (i *interactionStruct) followUp(content string) {
 	_, err := i.session.FollowupMessageCreate(i.interaction.Interaction, false, &discordgo.WebhookParams{
 		Content: content,
 	})
-	return err
+	logError(err)
 }
 
 func checkAllowed(i interaction, command command, value string) bool {
@@ -78,7 +87,7 @@ func getSystemdResponse(doneString string, resultChan <-chan string, err error) 
 var commandHandlers = map[command]func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption){
 	StartCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		unit := options[0].StringValue()
-		if checkAllowed(i, StartCommand, unit) && i.deferResponse() == nil {
+		if checkAllowed(i, StartCommand, unit) && i.deferResponse() {
 			resultChan, err := i.getSystemd().start(unit)
 			i.followUp(getSystemdResponse("Started "+unit, resultChan, err))
 		}
@@ -86,7 +95,7 @@ var commandHandlers = map[command]func(i interaction, options []*discordgo.Appli
 
 	StopCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		unit := options[0].StringValue()
-		if checkAllowed(i, StopCommand, unit) && i.deferResponse() == nil {
+		if checkAllowed(i, StopCommand, unit) && i.deferResponse() {
 			resultChan, err := i.getSystemd().stop(unit)
 			i.followUp(getSystemdResponse("Stopped "+unit, resultChan, err))
 		}
@@ -94,7 +103,7 @@ var commandHandlers = map[command]func(i interaction, options []*discordgo.Appli
 
 	RestartCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		unit := options[0].StringValue()
-		if checkAllowed(i, RestartCommand, unit) && i.deferResponse() == nil {
+		if checkAllowed(i, RestartCommand, unit) && i.deferResponse() {
 			resultChan, err := i.getSystemd().restart(unit)
 			i.followUp(getSystemdResponse("Restarted "+unit, resultChan, err))
 		}

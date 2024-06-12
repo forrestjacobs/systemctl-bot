@@ -106,19 +106,17 @@ func (i *mockInteraction) getUnits(command command) []string {
 	return i.units
 }
 
-func (i *mockInteraction) respond(content string) error {
+func (i *mockInteraction) respond(content string) {
 	i.calls = append(i.calls, mockCall{name: "respond", args: []any{content}})
-	return nil
 }
 
-func (i *mockInteraction) deferResponse() error {
+func (i *mockInteraction) deferResponse() bool {
 	i.calls = append(i.calls, mockCall{name: "deferResponse"})
-	return nil
+	return true
 }
 
-func (i *mockInteraction) followUp(content string) error {
+func (i *mockInteraction) followUp(content string) {
 	i.calls = append(i.calls, mockCall{name: "followUp", args: []any{content}})
-	return nil
 }
 
 func makeStringOption(v string) *discordgo.ApplicationCommandInteractionDataOption {
