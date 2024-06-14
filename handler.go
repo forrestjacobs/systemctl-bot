@@ -64,7 +64,7 @@ func (ctx *handlerCtx) followUp(content string) {
 func (ctx *handlerCtx) checkAllowed(command command, value string) bool {
 	allowed := slices.Contains(ctx.commandUnits[command], value)
 	if !allowed {
-		ctx.respond("command is not allowed")
+		log.Println(string(command) + " is not an allowed command for " + value)
 	}
 	return allowed
 }
