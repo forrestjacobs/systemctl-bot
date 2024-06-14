@@ -17,6 +17,11 @@ func logError(err error) {
 	}
 }
 
+type discordSession interface {
+	InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse, options ...discordgo.RequestOption) error
+	FollowupMessageCreate(interaction *discordgo.Interaction, wait bool, data *discordgo.WebhookParams, options ...discordgo.RequestOption) (*discordgo.Message, error)
+}
+
 type systemd interface {
 	StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
 	StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
@@ -24,31 +29,15 @@ type systemd interface {
 	GetUnitPropertyContext(ctx context.Context, unit string, propertyName string) (*dbus.Property, error)
 }
 
-type interaction interface {
-	getSystemd() systemd
-	getUnits(command command) []string
-	respond(content string)
-	deferResponse() bool
-	followUp(content string)
-}
-
-type interactionStruct struct {
+type handlerCtx struct {
 	systemd      systemd
+	session      discordSession
+	interaction  *discordgo.Interaction
 	commandUnits map[command][]string
-	session      *discordgo.Session
-	interaction  *discordgo.InteractionCreate
 }
 
-func (i *interactionStruct) getSystemd() systemd {
-	return i.systemd
-}
-
-func (i *interactionStruct) getUnits(command command) []string {
-	return i.commandUnits[command]
-}
-
-func (i *interactionStruct) respond(content string) {
-	err := i.session.InteractionRespond(i.interaction.Interaction, &discordgo.InteractionResponse{
+func (ctx *handlerCtx) respond(content string) {
+	err := ctx.session.InteractionRespond(ctx.interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: content,
@@ -57,25 +46,25 @@ func (i *interactionStruct) respond(content string) {
 	logError(err)
 }
 
-func (i *interactionStruct) deferResponse() bool {
-	err := i.session.InteractionRespond(i.interaction.Interaction, &discordgo.InteractionResponse{
+func (ctx *handlerCtx) deferResponse() bool {
+	err := ctx.session.InteractionRespond(ctx.interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 	})
 	logError(err)
 	return err == nil
 }
 
-func (i *interactionStruct) followUp(content string) {
-	_, err := i.session.FollowupMessageCreate(i.interaction.Interaction, false, &discordgo.WebhookParams{
+func (ctx *handlerCtx) followUp(content string) {
+	_, err := ctx.session.FollowupMessageCreate(ctx.interaction, false, &discordgo.WebhookParams{
 		Content: content,
 	})
 	logError(err)
 }
 
-func checkAllowed(i interaction, command command, value string) bool {
-	allowed := slices.Contains(i.getUnits(command), value)
+func (ctx *handlerCtx) checkAllowed(command command, value string) bool {
+	allowed := slices.Contains(ctx.commandUnits[command], value)
 	if !allowed {
-		i.respond("command is not allowed")
+		ctx.respond("command is not allowed")
 	}
 	return allowed
 }
@@ -93,38 +82,38 @@ func getSystemdResponse(doneString string, resultChan <-chan string, err error) 
 	return result
 }
 
-var commandHandlers = map[command]func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption){
-	StartCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
+var commandHandlers = map[command]func(ctx *handlerCtx, options []*discordgo.ApplicationCommandInteractionDataOption){
+	StartCommand: func(ctx *handlerCtx, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		unit := options[0].StringValue()
-		if checkAllowed(i, StartCommand, unit) && i.deferResponse() {
+		if ctx.checkAllowed(StartCommand, unit) && ctx.deferResponse() {
 			resultChan := make(chan string)
-			_, err := i.getSystemd().StartUnitContext(context.Background(), unit, "replace", resultChan)
-			i.followUp(getSystemdResponse("Started "+unit, resultChan, err))
+			_, err := ctx.systemd.StartUnitContext(context.Background(), unit, "replace", resultChan)
+			ctx.followUp(getSystemdResponse("Started "+unit, resultChan, err))
 		}
 	},
 
-	StopCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
+	StopCommand: func(ctx *handlerCtx, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		unit := options[0].StringValue()
-		if checkAllowed(i, StopCommand, unit) && i.deferResponse() {
+		if ctx.checkAllowed(StopCommand, unit) && ctx.deferResponse() {
 			resultChan := make(chan string)
-			_, err := i.getSystemd().StopUnitContext(context.Background(), unit, "replace", resultChan)
-			i.followUp(getSystemdResponse("Stopped "+unit, resultChan, err))
+			_, err := ctx.systemd.StopUnitContext(context.Background(), unit, "replace", resultChan)
+			ctx.followUp(getSystemdResponse("Stopped "+unit, resultChan, err))
 		}
 	},
 
-	RestartCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
+	RestartCommand: func(ctx *handlerCtx, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		unit := options[0].StringValue()
-		if checkAllowed(i, RestartCommand, unit) && i.deferResponse() {
+		if ctx.checkAllowed(RestartCommand, unit) && ctx.deferResponse() {
 			resultChan := make(chan string)
-			_, err := i.getSystemd().RestartUnitContext(context.Background(), unit, "replace", resultChan)
-			i.followUp(getSystemdResponse("Restarted "+unit, resultChan, err))
+			_, err := ctx.systemd.RestartUnitContext(context.Background(), unit, "replace", resultChan)
+			ctx.followUp(getSystemdResponse("Restarted "+unit, resultChan, err))
 		}
 	},
 
-	StatusCommand: func(i interaction, options []*discordgo.ApplicationCommandInteractionDataOption) {
+	StatusCommand: func(ctx *handlerCtx, options []*discordgo.ApplicationCommandInteractionDataOption) {
 		if len(options) == 0 {
-			lines := lo.FilterMap(i.getUnits(StatusCommand), func(unit string, _ int) (string, bool) {
-				prop, err := i.getSystemd().GetUnitPropertyContext(context.Background(), unit, "ActiveState")
+			lines := lo.FilterMap(ctx.commandUnits[StatusCommand], func(unit string, _ int) (string, bool) {
+				prop, err := ctx.systemd.GetUnitPropertyContext(context.Background(), unit, "ActiveState")
 				if err != nil {
 					log.Println("Error fetching unit state: ", err)
 					return unit + ": error getting status", true
@@ -134,18 +123,18 @@ var commandHandlers = map[command]func(i interaction, options []*discordgo.Appli
 			})
 
 			if len(lines) == 0 {
-				i.respond("Nothing is active")
+				ctx.respond("Nothing is active")
 			} else {
-				i.respond(strings.Join(lines, "\n"))
+				ctx.respond(strings.Join(lines, "\n"))
 			}
 		} else {
 			unit := options[0].StringValue()
-			if checkAllowed(i, StatusCommand, unit) {
-				prop, err := i.getSystemd().GetUnitPropertyContext(context.Background(), unit, "ActiveState")
+			if ctx.checkAllowed(StatusCommand, unit) {
+				prop, err := ctx.systemd.GetUnitPropertyContext(context.Background(), unit, "ActiveState")
 				if err != nil {
-					i.respond(err.Error())
+					ctx.respond(err.Error())
 				} else {
-					i.respond(prop.Value.Value().(string))
+					ctx.respond(prop.Value.Value().(string))
 				}
 			}
 		}
@@ -161,19 +150,19 @@ func getCommandData(data *discordgo.ApplicationCommandInteractionData) (string, 
 	}
 }
 
-func makeInteractionHandler(commandUnits map[command][]string, systemd systemd) func(session *discordgo.Session, i *discordgo.InteractionCreate) {
-	return func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
-		if interaction.Type != discordgo.InteractionApplicationCommand {
+func makeInteractionHandler(commandUnits map[command][]string, systemd systemd) func(session discordSession, event *discordgo.InteractionCreate) {
+	return func(session discordSession, event *discordgo.InteractionCreate) {
+		if event.Type != discordgo.InteractionApplicationCommand {
 			return
 		}
-		data := interaction.ApplicationCommandData()
+		data := event.ApplicationCommandData()
 		name, options := getCommandData(&data)
-		if h, ok := commandHandlers[command(name)]; ok {
-			h(&interactionStruct{
+		if handler, ok := commandHandlers[command(name)]; ok {
+			handler(&handlerCtx{
 				commandUnits: commandUnits,
 				systemd:      systemd,
 				session:      session,
-				interaction:  interaction,
+				interaction:  event.Interaction,
 			}, options)
 		}
 	}
