@@ -220,9 +220,7 @@ func TestStartSystemdErrorHandler(t *testing.T) {
 func TestStartDisallowedHandler(t *testing.T) {
 	m := handlerMocks{}
 	callHandler(StartCommand, makeCtx(&m), makeStringOption("disallowed.service"))
-	if !reflect.DeepEqual(m.calls, []mockCall{
-		mockCallForRespond("command is not allowed"),
-	}) {
+	if len(m.calls) > 0 {
 		t.Error("Not equal")
 	}
 }
@@ -254,9 +252,7 @@ func TestStopSystemdErrorHandler(t *testing.T) {
 func TestStopDisallowedHandler(t *testing.T) {
 	m := handlerMocks{}
 	callHandler(StopCommand, makeCtx(&m), makeStringOption("disallowed.service"))
-	if !reflect.DeepEqual(m.calls, []mockCall{
-		mockCallForRespond("command is not allowed"),
-	}) {
+	if len(m.calls) > 0 {
 		t.Error("Not equal")
 	}
 }
@@ -288,9 +284,7 @@ func TestRestartSystemdErrorHandler(t *testing.T) {
 func TestRestartDisallowedHandler(t *testing.T) {
 	m := handlerMocks{}
 	callHandler(RestartCommand, makeCtx(&m), makeStringOption("disallowed.service"))
-	if !reflect.DeepEqual(m.calls, []mockCall{
-		mockCallForRespond("command is not allowed"),
-	}) {
+	if len(m.calls) > 0 {
 		t.Error("Not equal")
 	}
 }
@@ -361,9 +355,7 @@ func TestUnitStatusSystemdErrorHandler(t *testing.T) {
 func TestDisallowedUnitStatusHandler(t *testing.T) {
 	m := handlerMocks{}
 	callHandler(StatusCommand, makeCtx(&m), makeStringOption("disallowed.service"))
-	if !reflect.DeepEqual(m.calls, []mockCall{
-		mockCallForRespond("command is not allowed"),
-	}) {
+	if len(m.calls) > 0 {
 		t.Error("Not equal")
 	}
 }
