@@ -1,9 +1,18 @@
 package main
 
 import (
+	"context"
+
 	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/samber/lo"
 )
+
+type systemd interface {
+	StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
+	StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
+	RestartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
+	GetUnitPropertyContext(ctx context.Context, unit string, propertyName string) (*dbus.Property, error)
+}
 
 func subscribeToUnits(conn *dbus.Conn, units []string) *dbus.SubscriptionSet {
 	subscription := conn.NewSubscriptionSet()

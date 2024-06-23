@@ -46,7 +46,10 @@ func main() {
 	discord, err := discordgo.New("Bot " + config.DiscordToken)
 	dieOnError(err, DiscordCreateSessionError)
 
-	discord.AddHandler(makeInteractionHandler(commandUnits, conn))
+	discord.AddHandler(makeInteractionHandler(&commandRunnerImpl{
+		systemd:      conn,
+		commandUnits: commandUnits,
+	}))
 	dieOnError(discord.Open(), DiscordOpenConnectionError)
 	defer discord.Close()
 
