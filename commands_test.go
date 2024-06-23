@@ -163,7 +163,7 @@ func TestStartDisallowedHandler(t *testing.T) {
 	m := handlerMocks{}
 	callHandler(&m, StartCommand, makeStringOption("disallowed.service"))
 	if len(m.calls) > 0 {
-		t.Error("Not equal")
+		t.Error("Unexpected calls")
 	}
 }
 
@@ -195,7 +195,7 @@ func TestStopDisallowedHandler(t *testing.T) {
 	m := handlerMocks{}
 	callHandler(&m, StopCommand, makeStringOption("disallowed.service"))
 	if len(m.calls) > 0 {
-		t.Error("Not equal")
+		t.Error("Unexpected calls")
 	}
 }
 
@@ -227,7 +227,7 @@ func TestRestartDisallowedHandler(t *testing.T) {
 	m := handlerMocks{}
 	callHandler(&m, RestartCommand, makeStringOption("disallowed.service"))
 	if len(m.calls) > 0 {
-		t.Error("Not equal")
+		t.Error("Unexpected calls")
 	}
 }
 
@@ -308,6 +308,6 @@ func TestDisallowedUnitStatusHandler(t *testing.T) {
 	m := handlerMocks{}
 	callHandler(&m, StatusCommand, makeStringOption("disallowed.service"))
 	if len(m.calls) > 0 {
-		t.Error("Not equal")
+		t.Error("Unexpected calls")
 	}
 }
