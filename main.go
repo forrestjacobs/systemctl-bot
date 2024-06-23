@@ -58,7 +58,7 @@ func main() {
 	_, err = discord.ApplicationCommandBulkOverwrite(applicationID, guildID, commands)
 	dieOnError(err, DiscordSetCommandError)
 
-	activeUnitsChan, errChan := subscribeToActiveUnits(conn, commandUnits[StatusCommand])
+	activeUnitsChan, errChan := subscribeToActiveUnits(conn.NewSubscriptionSet(), commandUnits[StatusCommand])
 
 	for {
 		select {

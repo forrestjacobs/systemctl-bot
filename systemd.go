@@ -14,15 +14,18 @@ type systemd interface {
 	GetUnitPropertyContext(ctx context.Context, unit string, propertyName string) (*dbus.Property, error)
 }
 
-func subscribeToUnits(conn *dbus.Conn, units []string) *dbus.SubscriptionSet {
-	subscription := conn.NewSubscriptionSet()
+type systemdSubscriptionSet interface {
+	Add(value string)
+	Subscribe() (<-chan map[string]*dbus.UnitStatus, <-chan error)
+}
+
+func subscribeToActiveUnits(subscription systemdSubscriptionSet, units []string) (<-chan []string, <-chan error) {
 	for _, unit := range units {
 		subscription.Add(unit)
 	}
-	return subscription
-}
 
-func transformStatusChanToActiveList(units []string, statusChan <-chan map[string]*dbus.UnitStatus) <-chan []string {
+	statusChan, errChan := subscription.Subscribe()
+
 	activeChan := make(chan []string)
 	go func() {
 		activeStates := make(map[string]bool)
@@ -36,10 +39,5 @@ func transformStatusChanToActiveList(units []string, statusChan <-chan map[strin
 			activeChan <- activeList
 		}
 	}()
-	return activeChan
-}
-
-func subscribeToActiveUnits(conn *dbus.Conn, units []string) (<-chan []string, <-chan error) {
-	statusChan, errChan := subscribeToUnits(conn, units).Subscribe()
-	return transformStatusChanToActiveList(units, statusChan), errChan
+	return activeChan, errChan
 }
