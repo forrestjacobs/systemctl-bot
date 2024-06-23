@@ -28,6 +28,20 @@ func (runner *testCommandRunner) run(ctx *commandCtx) {
 	})
 }
 
+func TestOnlyHandleApplicationCommands(t *testing.T) {
+	session := &testDiscordSession{}
+	runner := &testCommandRunner{}
+	handler := makeInteractionHandler(runner)
+	handler(session, &discordgo.InteractionCreate{
+		Interaction: &discordgo.Interaction{
+			Type: discordgo.InteractionPing,
+		},
+	})
+	if len(runner.calls) > 0 {
+		t.Error("Unexpected calls")
+	}
+}
+
 func TestHandleSingleCommandData(t *testing.T) {
 	session := &testDiscordSession{}
 	options := []*discordgo.ApplicationCommandInteractionDataOption{
