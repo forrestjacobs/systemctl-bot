@@ -112,8 +112,9 @@ func getConfigErrors(config tomlConfig) error {
 func GetConfig() (*Config, error) {
 	var path string
 
-	// TODO: add short version
-	flag.StringVar(&path, "config", "/etc/systemctl-bot.toml", "path to config file")
+	const defaultPath = "/etc/systemctl-bot.toml"
+	flag.StringVar(&path, "config", defaultPath, "path to config file")
+	flag.StringVar(&path, "c", defaultPath, "path to config file (shorthand)")
 
 	// TODO: Implement all of Clap's options
 	flag.Parse()
