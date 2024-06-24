@@ -1,4 +1,4 @@
-package status
+package status_test
 
 import (
 	"reflect"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/forrestjacobs/systemctl-bot/internal/config"
+	"github.com/forrestjacobs/systemctl-bot/internal/status"
 )
 
 type mockSubscriptionSet struct {
@@ -39,7 +40,7 @@ func TestUpdateStatusFromUnits(t *testing.T) {
 		updateChan: make(chan []any),
 	}
 
-	UpdateStatusFromUnits(&d, &config.Config{
+	status.UpdateStatusFromUnits(&d, &config.Config{
 		Units: map[config.Command][]string{
 			config.StatusCommand: {"a.service", "b.service"},
 		},
