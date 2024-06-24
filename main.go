@@ -4,18 +4,19 @@ import (
 	"context"
 	"log"
 	"os"
-	"strconv"
-	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/coreos/go-systemd/v22/dbus"
+	"github.com/forrestjacobs/systemctl-bot/internal/builder"
+	"github.com/forrestjacobs/systemctl-bot/internal/config"
+	"github.com/forrestjacobs/systemctl-bot/internal/handler"
+	"github.com/forrestjacobs/systemctl-bot/internal/status"
 )
 
 type exitErrorCode int
 
 const (
-	ConfigReadError          exitErrorCode = 10
-	CommandConstructionError exitErrorCode = 11
+	ConfigReadError exitErrorCode = 10
 
 	SystemdOpenConnectionError exitErrorCode = 20
 
@@ -32,43 +33,24 @@ func dieOnError(err error, code exitErrorCode) {
 }
 
 func main() {
-	config, err := getConfig()
+	c, err := config.GetConfig()
 	dieOnError(err, ConfigReadError)
-	commandUnits := getCommandUnits(config.Units)
-
-	commands, err := getCommands(commandUnits, config.CommandType)
-	dieOnError(err, CommandConstructionError)
 
 	conn, err := dbus.NewSystemdConnectionContext(context.Background())
 	dieOnError(err, SystemdOpenConnectionError)
 	defer conn.Close()
 
-	discord, err := discordgo.New("Bot " + config.DiscordToken)
+	discord, err := discordgo.New("Bot " + c.DiscordToken)
 	dieOnError(err, DiscordCreateSessionError)
 
-	discord.AddHandler(makeInteractionHandler(&commandRunnerImpl{
-		systemd:      conn,
-		commandUnits: commandUnits,
-	}))
+	handler.AddHandler(discord, conn, c)
 	dieOnError(discord.Open(), DiscordOpenConnectionError)
 	defer discord.Close()
 
-	applicationID := strconv.FormatUint(config.ApplicationID, 10)
-	guildID := strconv.FormatUint(config.GuildID, 10)
-	_, err = discord.ApplicationCommandBulkOverwrite(applicationID, guildID, commands)
-	dieOnError(err, DiscordSetCommandError)
+	dieOnError(builder.RegisterCommands(discord, c), DiscordSetCommandError)
 
-	activeUnitsChan, errChan := subscribeToActiveUnits(conn.NewSubscriptionSet(), commandUnits[StatusCommand])
-
-	for {
-		select {
-		case activeUnits := <-activeUnitsChan:
-			err := discord.UpdateGameStatus(0, strings.Join(activeUnits, ", "))
-			if err != nil {
-				log.Println("Error updating status: ", err)
-			}
-		case err := <-errChan:
-			log.Println("Error listening to dbus events: ", err)
-		}
+	errChan := status.UpdateStatusFromUnits(discord, c, conn.NewSubscriptionSet())
+	for err := range errChan {
+		log.Println("Error listening to dbus events: ", err)
 	}
 }

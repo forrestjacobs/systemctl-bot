@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"os"
@@ -18,23 +18,23 @@ name = "s.service"
 permissions = [ "status" ]
 `
 
-func getBaseConfig() systemctlBotConfig {
-	return systemctlBotConfig{
+func getBaseConfig() *Config {
+	return &Config{
 		ApplicationID: 1,
 		GuildID:       2,
 		DiscordToken:  "a",
 		CommandType:   Single,
-		Units: []*systemctlUnit{
-			{
-				Name:        "s.service",
-				Permissions: []unitPermission{StatusPermission},
-			},
+		Units: map[Command][]string{
+			StartCommand:   {},
+			StopCommand:    {},
+			RestartCommand: {},
+			StatusCommand:  {"s.service"},
 		},
 	}
 }
 
 func TestReadConfig(t *testing.T) {
-	config, err := readConfig(strings.NewReader(baseConfigToml))
+	config, err := ReadConfig(strings.NewReader(baseConfigToml))
 
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
@@ -47,7 +47,7 @@ func TestReadConfig(t *testing.T) {
 func TestReadConfigWithInvalidEnvironmentVariables(t *testing.T) {
 	os.Setenv("SBOT_APPLICATION_ID", "one")
 	os.Setenv("SBOT_GUILD_ID", "two")
-	config, err := readConfig(strings.NewReader(baseConfigToml))
+	config, err := ReadConfig(strings.NewReader(baseConfigToml))
 	os.Clearenv()
 
 	if err != nil {
@@ -63,13 +63,13 @@ func TestReadConfigWithEnvironmentVariables(t *testing.T) {
 	os.Setenv("SBOT_GUILD_ID", "20")
 	os.Setenv("SBOT_DISCORD_TOKEN", "Z")
 	os.Setenv("SBOT_COMMAND_TYPE", "multiple")
-	config, err := readConfig(strings.NewReader(baseConfigToml))
+	config, err := ReadConfig(strings.NewReader(baseConfigToml))
 	os.Clearenv()
 
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
-	if !reflect.DeepEqual(config, systemctlBotConfig{
+	if !reflect.DeepEqual(config, &Config{
 		ApplicationID: 10,
 		GuildID:       20,
 		DiscordToken:  "Z",
@@ -81,7 +81,7 @@ func TestReadConfigWithEnvironmentVariables(t *testing.T) {
 }
 
 func TestReadConfigSuppliesDefaults(t *testing.T) {
-	config, err := readConfig(strings.NewReader(`
+	config, err := ReadConfig(strings.NewReader(`
 		application_id = 1
 		guild_id = 2
 		discord_token = "a"
@@ -98,20 +98,16 @@ func TestReadConfigSuppliesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
-	if !reflect.DeepEqual(config, systemctlBotConfig{
+	if !reflect.DeepEqual(config, &Config{
 		ApplicationID: 1,
 		GuildID:       2,
 		DiscordToken:  "a",
 		CommandType:   Single,
-		Units: []*systemctlUnit{
-			{
-				Name:        "s.service",
-				Permissions: []unitPermission{StatusPermission},
-			},
-			{
-				Name:        "t.timer",
-				Permissions: []unitPermission{StatusPermission},
-			},
+		Units: map[Command][]string{
+			StartCommand:   {},
+			StopCommand:    {},
+			RestartCommand: {},
+			StatusCommand:  {"s.service", "t.timer"},
 		},
 	}) {
 		t.Error("Not equal")
@@ -119,14 +115,14 @@ func TestReadConfigSuppliesDefaults(t *testing.T) {
 }
 
 func TestReadBadToml(t *testing.T) {
-	_, err := readConfig(strings.NewReader("bad bad not good"))
+	_, err := ReadConfig(strings.NewReader("bad bad not good"))
 	if err == nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
 }
 
 func TestReadConfigWithoutApplicationID(t *testing.T) {
-	_, err := readConfig(strings.NewReader(`
+	_, err := ReadConfig(strings.NewReader(`
 		guild_id = 2
 		discord_token = "a"
 
@@ -140,7 +136,7 @@ func TestReadConfigWithoutApplicationID(t *testing.T) {
 }
 
 func TestReadConfigWithoutDiscordToken(t *testing.T) {
-	_, err := readConfig(strings.NewReader(`
+	_, err := ReadConfig(strings.NewReader(`
 		application_id = 1
 		guild_id = 2
 
@@ -154,7 +150,7 @@ func TestReadConfigWithoutDiscordToken(t *testing.T) {
 }
 
 func TestReadConfigWithoutGuildID(t *testing.T) {
-	_, err := readConfig(strings.NewReader(`
+	_, err := ReadConfig(strings.NewReader(`
 		application_id = 1
 		discord_token = "a"
 
@@ -168,7 +164,7 @@ func TestReadConfigWithoutGuildID(t *testing.T) {
 }
 
 func TestReadConfigWithInvalidCommandType(t *testing.T) {
-	_, err := readConfig(strings.NewReader(`
+	_, err := ReadConfig(strings.NewReader(`
 		application_id = 1
 		guild_id = 2
 		discord_token = "a"
@@ -184,7 +180,7 @@ func TestReadConfigWithInvalidCommandType(t *testing.T) {
 }
 
 func TestReadConfigWithoutUnits(t *testing.T) {
-	_, err := readConfig(strings.NewReader(`
+	_, err := ReadConfig(strings.NewReader(`
 		application_id = 1
 		guild_id = 2
 		discord_token = "a"
@@ -195,7 +191,7 @@ func TestReadConfigWithoutUnits(t *testing.T) {
 }
 
 func TestReadConfigWithoutUnitName(t *testing.T) {
-	_, err := readConfig(strings.NewReader(`
+	_, err := ReadConfig(strings.NewReader(`
 		application_id = 1
 		guild_id = 2
 		discord_token = "a"
@@ -209,7 +205,7 @@ func TestReadConfigWithoutUnitName(t *testing.T) {
 }
 
 func TestReadConfigWithoutUnitPermissions(t *testing.T) {
-	_, err := readConfig(strings.NewReader(`
+	_, err := ReadConfig(strings.NewReader(`
 		application_id = 1
 		guild_id = 2
 		discord_token = "a"
@@ -223,7 +219,7 @@ func TestReadConfigWithoutUnitPermissions(t *testing.T) {
 }
 
 func TestReadConfigWithInvalidUnitPermission(t *testing.T) {
-	_, err := readConfig(strings.NewReader(`
+	_, err := ReadConfig(strings.NewReader(`
 		application_id = 1
 		guild_id = 2
 		discord_token = "a"

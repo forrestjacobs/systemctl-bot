@@ -1,19 +1,20 @@
-package main
+package builder
 
 import (
 	"reflect"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/forrestjacobs/systemctl-bot/internal/config"
 	"github.com/samber/lo"
 )
 
-func getBuilderTestCommandUnits() map[command][]string {
-	return map[command][]string{
-		StartCommand:   {"startable.service", "restartable.service"},
-		StopCommand:    {"stoppable.service", "restartable.service"},
-		RestartCommand: {"restartable.service"},
-		StatusCommand:  {"startable.service", "stoppable.service", "restartable.service"},
+func getBuilderTestUnits() map[config.Command][]string {
+	return map[config.Command][]string{
+		config.StartCommand:   {"startable.service", "restartable.service"},
+		config.StopCommand:    {"stoppable.service", "restartable.service"},
+		config.RestartCommand: {"restartable.service"},
+		config.StatusCommand:  {"startable.service", "stoppable.service", "restartable.service"},
 	}
 }
 
@@ -50,7 +51,7 @@ func makeUnitOption(description string, required bool, units ...string) *discord
 }
 
 func TestGetSingleCommand(t *testing.T) {
-	commands, err := getCommands(getBuilderTestCommandUnits(), Single)
+	commands, err := getCommands(getBuilderTestUnits(), config.Single)
 
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
@@ -70,7 +71,7 @@ func TestGetSingleCommand(t *testing.T) {
 }
 
 func TestMultipleCommands(t *testing.T) {
-	commands, err := getCommands(getBuilderTestCommandUnits(), Multiple)
+	commands, err := getCommands(getBuilderTestUnits(), config.Multiple)
 
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
@@ -87,7 +88,7 @@ func TestMultipleCommands(t *testing.T) {
 }
 
 func TestInvalidCommandType(t *testing.T) {
-	_, err := getCommands(getBuilderTestCommandUnits(), "invalid")
+	_, err := getCommands(getBuilderTestUnits(), "invalid")
 
 	if err.Error() != "invalid command type" {
 		t.Fatalf("Unexpected error %v", err)

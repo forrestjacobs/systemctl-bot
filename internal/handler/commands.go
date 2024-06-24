@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"context"
@@ -7,8 +7,17 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/coreos/go-systemd/v22/dbus"
+	"github.com/forrestjacobs/systemctl-bot/internal/config"
 	"github.com/samber/lo"
 )
+
+type systemd interface {
+	StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
+	StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
+	RestartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
+	GetUnitPropertyContext(ctx context.Context, unit string, propertyName string) (*dbus.Property, error)
+}
 
 func logError(err error) {
 	if err != nil {
@@ -54,37 +63,37 @@ func followUp(ctx *commandCtx, content string) {
 	logError(err)
 }
 
-var commandHandlers = map[command]func(ctx *commandCtx, runner *commandRunnerImpl){
-	StartCommand: func(ctx *commandCtx, runner *commandRunnerImpl) {
+var commandHandlers = map[config.Command]func(ctx *commandCtx, runner *commandRunnerImpl){
+	config.StartCommand: func(ctx *commandCtx, runner *commandRunnerImpl) {
 		unit := ctx.options[0].StringValue()
-		if runner.checkAllowed(StartCommand, unit) && deferResponse(ctx) {
+		if runner.checkAllowed(config.StartCommand, unit) && deferResponse(ctx) {
 			resultChan := make(chan string)
 			_, err := runner.systemd.StartUnitContext(context.Background(), unit, "replace", resultChan)
 			followUp(ctx, getSystemdResponse("Started "+unit, resultChan, err))
 		}
 	},
 
-	StopCommand: func(ctx *commandCtx, runner *commandRunnerImpl) {
+	config.StopCommand: func(ctx *commandCtx, runner *commandRunnerImpl) {
 		unit := ctx.options[0].StringValue()
-		if runner.checkAllowed(StopCommand, unit) && deferResponse(ctx) {
+		if runner.checkAllowed(config.StopCommand, unit) && deferResponse(ctx) {
 			resultChan := make(chan string)
 			_, err := runner.systemd.StopUnitContext(context.Background(), unit, "replace", resultChan)
 			followUp(ctx, getSystemdResponse("Stopped "+unit, resultChan, err))
 		}
 	},
 
-	RestartCommand: func(ctx *commandCtx, runner *commandRunnerImpl) {
+	config.RestartCommand: func(ctx *commandCtx, runner *commandRunnerImpl) {
 		unit := ctx.options[0].StringValue()
-		if runner.checkAllowed(RestartCommand, unit) && deferResponse(ctx) {
+		if runner.checkAllowed(config.RestartCommand, unit) && deferResponse(ctx) {
 			resultChan := make(chan string)
 			_, err := runner.systemd.RestartUnitContext(context.Background(), unit, "replace", resultChan)
 			followUp(ctx, getSystemdResponse("Restarted "+unit, resultChan, err))
 		}
 	},
 
-	StatusCommand: func(ctx *commandCtx, runner *commandRunnerImpl) {
+	config.StatusCommand: func(ctx *commandCtx, runner *commandRunnerImpl) {
 		if len(ctx.options) == 0 {
-			lines := lo.FilterMap(runner.commandUnits[StatusCommand], func(unit string, _ int) (string, bool) {
+			lines := lo.FilterMap(runner.units[config.StatusCommand], func(unit string, _ int) (string, bool) {
 				prop, err := runner.systemd.GetUnitPropertyContext(context.Background(), unit, "ActiveState")
 				if err != nil {
 					log.Println("Error fetching unit state: ", err)
@@ -101,7 +110,7 @@ var commandHandlers = map[command]func(ctx *commandCtx, runner *commandRunnerImp
 			}
 		} else {
 			unit := ctx.options[0].StringValue()
-			if runner.checkAllowed(StatusCommand, unit) {
+			if runner.checkAllowed(config.StatusCommand, unit) {
 				prop, err := runner.systemd.GetUnitPropertyContext(context.Background(), unit, "ActiveState")
 				if err != nil {
 					respond(ctx, err.Error())
@@ -114,12 +123,12 @@ var commandHandlers = map[command]func(ctx *commandCtx, runner *commandRunnerImp
 }
 
 type commandRunnerImpl struct {
-	systemd      systemd
-	commandUnits map[command][]string
+	systemd systemd
+	units   map[config.Command][]string
 }
 
-func (runner *commandRunnerImpl) checkAllowed(command command, value string) bool {
-	allowed := slices.Contains(runner.commandUnits[command], value)
+func (runner *commandRunnerImpl) checkAllowed(command config.Command, value string) bool {
+	allowed := slices.Contains(runner.units[command], value)
 	if !allowed {
 		log.Println(string(command) + " is not an allowed command for " + value)
 	}
@@ -127,7 +136,7 @@ func (runner *commandRunnerImpl) checkAllowed(command command, value string) boo
 }
 
 func (runner *commandRunnerImpl) run(ctx *commandCtx) {
-	if handler, ok := commandHandlers[command(ctx.commandName)]; ok {
+	if handler, ok := commandHandlers[config.Command(ctx.commandName)]; ok {
 		handler(ctx, runner)
 	}
 }
