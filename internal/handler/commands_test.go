@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"context"
@@ -9,10 +9,16 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/coreos/go-systemd/v22/dbus"
+	"github.com/forrestjacobs/systemctl-bot/internal/config"
 	godbus "github.com/godbus/dbus/v5"
 )
 
 var testInteraction = &discordgo.Interaction{ID: "12345"}
+
+type mockCall struct {
+	name string
+	args []any
+}
 
 type handlerMocks struct {
 	calls        []mockCall
@@ -71,20 +77,20 @@ func (s *handlerMocks) GetUnitPropertyContext(ctx context.Context, unit string, 
 	}, nil
 }
 
-func callHandler(mocks *handlerMocks, cmd command, options ...*discordgo.ApplicationCommandInteractionDataOption) {
+func callHandler(mocks *handlerMocks, command config.Command, options ...*discordgo.ApplicationCommandInteractionDataOption) {
 	ctx := &commandCtx{
-		commandName: string(cmd),
+		commandName: string(command),
 		options:     options,
 		session:     mocks,
 		interaction: testInteraction,
 	}
 	runner := &commandRunnerImpl{
 		systemd: mocks,
-		commandUnits: map[command][]string{
-			StartCommand:   {"startable.service"},
-			StopCommand:    {"stoppable.service"},
-			RestartCommand: {"restartable.service"},
-			StatusCommand:  {"active.service", "reloading.service", "inactive.service"},
+		units: map[config.Command][]string{
+			config.StartCommand:   {"startable.service"},
+			config.StopCommand:    {"stoppable.service"},
+			config.RestartCommand: {"restartable.service"},
+			config.StatusCommand:  {"active.service", "reloading.service", "inactive.service"},
 		},
 	}
 	runner.run(ctx)
@@ -137,7 +143,7 @@ func mockCallForGetUnitActiveState(unit string) mockCall {
 
 func TestStartHandler(t *testing.T) {
 	m := handlerMocks{}
-	callHandler(&m, StartCommand, makeStringOption("startable.service"))
+	callHandler(&m, config.StartCommand, makeStringOption("startable.service"))
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(),
 		mockCallForUnitAction("Start", "startable.service"),
@@ -149,7 +155,7 @@ func TestStartHandler(t *testing.T) {
 
 func TestStartSystemdErrorHandler(t *testing.T) {
 	m := handlerMocks{systemdError: errors.New("could not start")}
-	callHandler(&m, StartCommand, makeStringOption("startable.service"))
+	callHandler(&m, config.StartCommand, makeStringOption("startable.service"))
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(),
 		mockCallForUnitAction("Start", "startable.service"),
@@ -161,7 +167,7 @@ func TestStartSystemdErrorHandler(t *testing.T) {
 
 func TestStartDisallowedHandler(t *testing.T) {
 	m := handlerMocks{}
-	callHandler(&m, StartCommand, makeStringOption("disallowed.service"))
+	callHandler(&m, config.StartCommand, makeStringOption("disallowed.service"))
 	if len(m.calls) > 0 {
 		t.Error("Unexpected calls")
 	}
@@ -169,7 +175,7 @@ func TestStartDisallowedHandler(t *testing.T) {
 
 func TestStopHandler(t *testing.T) {
 	m := handlerMocks{}
-	callHandler(&m, StopCommand, makeStringOption("stoppable.service"))
+	callHandler(&m, config.StopCommand, makeStringOption("stoppable.service"))
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(),
 		mockCallForUnitAction("Stop", "stoppable.service"),
@@ -181,7 +187,7 @@ func TestStopHandler(t *testing.T) {
 
 func TestStopSystemdErrorHandler(t *testing.T) {
 	m := handlerMocks{systemdError: errors.New("could not stop")}
-	callHandler(&m, StopCommand, makeStringOption("stoppable.service"))
+	callHandler(&m, config.StopCommand, makeStringOption("stoppable.service"))
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(),
 		mockCallForUnitAction("Stop", "stoppable.service"),
@@ -193,7 +199,7 @@ func TestStopSystemdErrorHandler(t *testing.T) {
 
 func TestStopDisallowedHandler(t *testing.T) {
 	m := handlerMocks{}
-	callHandler(&m, StopCommand, makeStringOption("disallowed.service"))
+	callHandler(&m, config.StopCommand, makeStringOption("disallowed.service"))
 	if len(m.calls) > 0 {
 		t.Error("Unexpected calls")
 	}
@@ -201,7 +207,7 @@ func TestStopDisallowedHandler(t *testing.T) {
 
 func TestRestartHandler(t *testing.T) {
 	m := handlerMocks{}
-	callHandler(&m, RestartCommand, makeStringOption("restartable.service"))
+	callHandler(&m, config.RestartCommand, makeStringOption("restartable.service"))
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(),
 		mockCallForUnitAction("Restart", "restartable.service"),
@@ -213,7 +219,7 @@ func TestRestartHandler(t *testing.T) {
 
 func TestRestartSystemdErrorHandler(t *testing.T) {
 	m := handlerMocks{systemdError: errors.New("could not restart")}
-	callHandler(&m, RestartCommand, makeStringOption("restartable.service"))
+	callHandler(&m, config.RestartCommand, makeStringOption("restartable.service"))
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(),
 		mockCallForUnitAction("Restart", "restartable.service"),
@@ -225,7 +231,7 @@ func TestRestartSystemdErrorHandler(t *testing.T) {
 
 func TestRestartDisallowedHandler(t *testing.T) {
 	m := handlerMocks{}
-	callHandler(&m, RestartCommand, makeStringOption("disallowed.service"))
+	callHandler(&m, config.RestartCommand, makeStringOption("disallowed.service"))
 	if len(m.calls) > 0 {
 		t.Error("Unexpected calls")
 	}
@@ -233,7 +239,7 @@ func TestRestartDisallowedHandler(t *testing.T) {
 
 func TestMultiStatusHandler(t *testing.T) {
 	m := handlerMocks{}
-	callHandler(&m, StatusCommand)
+	callHandler(&m, config.StatusCommand)
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForGetUnitActiveState("active.service"),
 		mockCallForGetUnitActiveState("reloading.service"),
@@ -248,7 +254,7 @@ func TestMultiStatusSystemdErrorHandler(t *testing.T) {
 	m := handlerMocks{
 		systemdError: errors.New("could not get status"),
 	}
-	callHandler(&m, StatusCommand)
+	callHandler(&m, config.StatusCommand)
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForGetUnitActiveState("active.service"),
 		mockCallForGetUnitActiveState("reloading.service"),
@@ -262,15 +268,15 @@ func TestMultiStatusSystemdErrorHandler(t *testing.T) {
 func TestNoneActiveStatusHandler(t *testing.T) {
 	m := handlerMocks{}
 	ctx := &commandCtx{
-		commandName: string(StatusCommand),
+		commandName: string(config.StatusCommand),
 		options:     []*discordgo.ApplicationCommandInteractionDataOption{},
 		session:     &m,
 		interaction: testInteraction,
 	}
 	runner := &commandRunnerImpl{
 		systemd: &m,
-		commandUnits: map[command][]string{
-			StatusCommand: {"inactive.service"},
+		units: map[config.Command][]string{
+			config.StatusCommand: {"inactive.service"},
 		},
 	}
 	runner.run(ctx)
@@ -284,7 +290,7 @@ func TestNoneActiveStatusHandler(t *testing.T) {
 
 func TestUnitStatusHandler(t *testing.T) {
 	m := handlerMocks{}
-	callHandler(&m, StatusCommand, makeStringOption("reloading.service"))
+	callHandler(&m, config.StatusCommand, makeStringOption("reloading.service"))
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForGetUnitActiveState("reloading.service"),
 		mockCallForRespond("reloading"),
@@ -295,7 +301,7 @@ func TestUnitStatusHandler(t *testing.T) {
 
 func TestUnitStatusSystemdErrorHandler(t *testing.T) {
 	m := handlerMocks{systemdError: errors.New("could not get status")}
-	callHandler(&m, StatusCommand, makeStringOption("reloading.service"))
+	callHandler(&m, config.StatusCommand, makeStringOption("reloading.service"))
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForGetUnitActiveState("reloading.service"),
 		mockCallForRespond("could not get status"),
@@ -306,7 +312,7 @@ func TestUnitStatusSystemdErrorHandler(t *testing.T) {
 
 func TestDisallowedUnitStatusHandler(t *testing.T) {
 	m := handlerMocks{}
-	callHandler(&m, StatusCommand, makeStringOption("disallowed.service"))
+	callHandler(&m, config.StatusCommand, makeStringOption("disallowed.service"))
 	if len(m.calls) > 0 {
 		t.Error("Unexpected calls")
 	}

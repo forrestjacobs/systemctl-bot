@@ -1,7 +1,8 @@
-package main
+package handler
 
 import (
 	"github.com/bwmarrin/discordgo"
+	"github.com/forrestjacobs/systemctl-bot/internal/config"
 )
 
 type discordSession interface {
@@ -43,4 +44,11 @@ func makeInteractionHandler(runner commandRunner) func(session discordSession, e
 			interaction: event.Interaction,
 		})
 	}
+}
+
+func AddHandler(session *discordgo.Session, systemd systemd, c *config.Config) {
+	session.AddHandler(makeInteractionHandler(&commandRunnerImpl{
+		systemd: systemd,
+		units:   c.Units,
+	}))
 }

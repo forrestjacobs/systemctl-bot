@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"reflect"
@@ -7,32 +7,25 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-type testDiscordSession struct {
-}
-
-func (d *testDiscordSession) InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse, options ...discordgo.RequestOption) error {
-	return nil
-}
-func (d *testDiscordSession) FollowupMessageCreate(interaction *discordgo.Interaction, wait bool, data *discordgo.WebhookParams, options ...discordgo.RequestOption) (*discordgo.Message, error) {
-	return nil, nil
+func makeStringOption(v string) *discordgo.ApplicationCommandInteractionDataOption {
+	return &discordgo.ApplicationCommandInteractionDataOption{
+		Type:  discordgo.ApplicationCommandOptionString,
+		Value: v,
+	}
 }
 
 type testCommandRunner struct {
-	calls []mockCall
+	calls [][]any
 }
 
 func (runner *testCommandRunner) run(ctx *commandCtx) {
-	runner.calls = append(runner.calls, mockCall{
-		name: "run",
-		args: []any{ctx},
-	})
+	runner.calls = append(runner.calls, []any{"run", ctx})
 }
 
 func TestOnlyHandleApplicationCommands(t *testing.T) {
-	session := &testDiscordSession{}
 	runner := &testCommandRunner{}
 	handler := makeInteractionHandler(runner)
-	handler(session, &discordgo.InteractionCreate{
+	handler(nil, &discordgo.InteractionCreate{
 		Interaction: &discordgo.Interaction{
 			Type: discordgo.InteractionPing,
 		},
@@ -43,7 +36,6 @@ func TestOnlyHandleApplicationCommands(t *testing.T) {
 }
 
 func TestHandleSingleCommandData(t *testing.T) {
-	session := &testDiscordSession{}
 	options := []*discordgo.ApplicationCommandInteractionDataOption{
 		makeStringOption("startable.service"),
 	}
@@ -62,19 +54,19 @@ func TestHandleSingleCommandData(t *testing.T) {
 
 	runner := &testCommandRunner{}
 	handler := makeInteractionHandler(runner)
-	handler(session, &discordgo.InteractionCreate{
+	handler(nil, &discordgo.InteractionCreate{
 		Interaction: interaction,
 	})
 
-	if !reflect.DeepEqual(runner.calls, []mockCall{
+	if !reflect.DeepEqual(runner.calls, [][]any{
 		{
-			name: "run",
-			args: []any{&commandCtx{
+			"run",
+			&commandCtx{
 				commandName: "start",
 				options:     options,
-				session:     session,
+				session:     nil,
 				interaction: interaction,
-			}},
+			},
 		},
 	}) {
 		t.Error("Not equal")
@@ -82,7 +74,6 @@ func TestHandleSingleCommandData(t *testing.T) {
 }
 
 func TestHandleMultipleCommandData(t *testing.T) {
-	session := &testDiscordSession{}
 	options := []*discordgo.ApplicationCommandInteractionDataOption{
 		makeStringOption("stoppable.service"),
 	}
@@ -96,19 +87,19 @@ func TestHandleMultipleCommandData(t *testing.T) {
 
 	runner := &testCommandRunner{}
 	handler := makeInteractionHandler(runner)
-	handler(session, &discordgo.InteractionCreate{
+	handler(nil, &discordgo.InteractionCreate{
 		Interaction: interaction,
 	})
 
-	if !reflect.DeepEqual(runner.calls, []mockCall{
+	if !reflect.DeepEqual(runner.calls, [][]any{
 		{
-			name: "run",
-			args: []any{&commandCtx{
+			"run",
+			&commandCtx{
 				commandName: "stop",
 				options:     options,
-				session:     session,
+				session:     nil,
 				interaction: interaction,
-			}},
+			},
 		},
 	}) {
 		t.Error("Not equal")

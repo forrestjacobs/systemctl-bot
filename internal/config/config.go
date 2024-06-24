@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"errors"
@@ -10,22 +10,53 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/samber/lo"
 )
 
-type commandType string
+type Command string
 
 const (
-	Single   commandType = "single"
-	Multiple commandType = "multiple"
+	StartCommand   Command = "start"
+	StopCommand    Command = "stop"
+	RestartCommand Command = "restart"
+	StatusCommand  Command = "status"
 )
 
-type systemctlBotConfig struct {
+type CommandType string
+
+const (
+	Single   CommandType = "single"
+	Multiple CommandType = "multiple"
+)
+
+type Config struct {
+	ApplicationID uint64
+	DiscordToken  string
+	GuildID       uint64
+	CommandType   CommandType
+	Units         map[Command][]string
+}
+
+type tomlConfig struct {
 	ApplicationID uint64      `toml:"application_id"`
 	DiscordToken  string      `toml:"discord_token"`
 	GuildID       uint64      `toml:"guild_id"`
-	CommandType   commandType `toml:"command_type"`
-	Units         []*systemctlUnit
+	CommandType   CommandType `toml:"command_type"`
+	Units         []*unit     `toml:"units"`
 }
+
+type unit struct {
+	Name        string
+	Permissions []permission
+}
+
+type permission string
+
+const (
+	StartPermission  permission = "start"
+	StopPermission   permission = "stop"
+	StatusPermission permission = "status"
+)
 
 func lookupUint64Env(key string) (uint64, bool) {
 	strVal, exists := os.LookupEnv(key)
@@ -42,7 +73,7 @@ func lookupUint64Env(key string) (uint64, bool) {
 	return val, true
 }
 
-func getConfigErrors(config systemctlBotConfig) error {
+func getConfigErrors(config tomlConfig) error {
 	errs := make([]error, 0)
 
 	if config.ApplicationID == 0 {
@@ -78,7 +109,7 @@ func getConfigErrors(config systemctlBotConfig) error {
 	return errors.Join(errs...)
 }
 
-func getConfig() (systemctlBotConfig, error) {
+func GetConfig() (*Config, error) {
 	var path string
 
 	// TODO: add short version
@@ -89,19 +120,25 @@ func getConfig() (systemctlBotConfig, error) {
 
 	reader, err := os.Open(path)
 	if err != nil {
-		return systemctlBotConfig{}, err
+		return nil, err
 	}
 	defer reader.Close()
 
-	return readConfig(reader)
+	return ReadConfig(reader)
 }
 
-func readConfig(r io.Reader) (systemctlBotConfig, error) {
-	var config systemctlBotConfig
+func getUnitsWithPermissions(units []*unit, permissions ...permission) []string {
+	return lo.FilterMap(units, func(unit *unit, _ int) (string, bool) {
+		return unit.Name, lo.Every(unit.Permissions, permissions)
+	})
+}
+
+func ReadConfig(r io.Reader) (*Config, error) {
+	var config tomlConfig
 
 	_, err := toml.NewDecoder(r).Decode(&config)
 	if err != nil {
-		return config, err
+		return nil, err
 	}
 
 	if val, present := lookupUint64Env("SBOT_APPLICATION_ID"); present {
@@ -114,7 +151,7 @@ func readConfig(r io.Reader) (systemctlBotConfig, error) {
 		config.DiscordToken = val
 	}
 	if val, present := os.LookupEnv("SBOT_COMMAND_TYPE"); present {
-		config.CommandType = commandType(val)
+		config.CommandType = CommandType(val)
 	}
 
 	if config.CommandType == "" {
@@ -127,5 +164,17 @@ func readConfig(r io.Reader) (systemctlBotConfig, error) {
 		}
 	}
 
-	return config, getConfigErrors(config)
+	units := config.Units
+	return &Config{
+		ApplicationID: config.ApplicationID,
+		DiscordToken:  config.DiscordToken,
+		GuildID:       config.GuildID,
+		CommandType:   config.CommandType,
+		Units: map[Command][]string{
+			StartCommand:   getUnitsWithPermissions(units, StartPermission),
+			StopCommand:    getUnitsWithPermissions(units, StopPermission),
+			RestartCommand: getUnitsWithPermissions(units, StartPermission, StopPermission),
+			StatusCommand:  getUnitsWithPermissions(units, StatusPermission),
+		},
+	}, getConfigErrors(config)
 }
