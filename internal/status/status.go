@@ -1,7 +1,6 @@
 package status
 
 import (
-	"log"
 	"strings"
 
 	"github.com/coreos/go-systemd/v22/dbus"
@@ -24,7 +23,15 @@ func UpdateStatusFromUnits(discord DiscordSession, c *config.Config, set Subscri
 		set.Add(unit)
 	}
 
-	statusChan, errChan := set.Subscribe()
+	statusChan, setErrChan := set.Subscribe()
+
+	errChan := make(chan error)
+
+	go func() {
+		for err := range setErrChan {
+			errChan <- err
+		}
+	}()
 
 	go func() {
 		activeStates := make(map[string]bool)
@@ -37,9 +44,10 @@ func UpdateStatusFromUnits(discord DiscordSession, c *config.Config, set Subscri
 			})
 			err := discord.UpdateGameStatus(0, strings.Join(activeUnits, ", "))
 			if err != nil {
-				log.Println("Error updating status: ", err)
+				errChan <- err
 			}
 		}
 	}()
+
 	return errChan
 }
