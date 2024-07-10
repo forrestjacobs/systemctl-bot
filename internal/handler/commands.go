@@ -3,21 +3,12 @@ package handler
 import (
 	"context"
 	"log"
-	"slices"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/forrestjacobs/systemctl-bot/internal/config"
 	"github.com/samber/lo"
 )
-
-type systemd interface {
-	StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
-	StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
-	RestartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
-	GetUnitPropertyContext(ctx context.Context, unit string, propertyName string) (*dbus.Property, error)
-}
 
 func logError(err error) {
 	if err != nil {
@@ -63,8 +54,8 @@ func followUp(ctx *commandCtx, content string) {
 	logError(err)
 }
 
-var commandHandlers = map[config.Command]func(ctx *commandCtx, runner *commandRunnerImpl){
-	config.StartCommand: func(ctx *commandCtx, runner *commandRunnerImpl) {
+var commandHandlers = map[config.Command]func(ctx *commandCtx, runner *commandRunner){
+	config.StartCommand: func(ctx *commandCtx, runner *commandRunner) {
 		unit := ctx.options[0].StringValue()
 		if runner.checkAllowed(config.StartCommand, unit) && deferResponse(ctx) {
 			resultChan := make(chan string)
@@ -73,7 +64,7 @@ var commandHandlers = map[config.Command]func(ctx *commandCtx, runner *commandRu
 		}
 	},
 
-	config.StopCommand: func(ctx *commandCtx, runner *commandRunnerImpl) {
+	config.StopCommand: func(ctx *commandCtx, runner *commandRunner) {
 		unit := ctx.options[0].StringValue()
 		if runner.checkAllowed(config.StopCommand, unit) && deferResponse(ctx) {
 			resultChan := make(chan string)
@@ -82,7 +73,7 @@ var commandHandlers = map[config.Command]func(ctx *commandCtx, runner *commandRu
 		}
 	},
 
-	config.RestartCommand: func(ctx *commandCtx, runner *commandRunnerImpl) {
+	config.RestartCommand: func(ctx *commandCtx, runner *commandRunner) {
 		unit := ctx.options[0].StringValue()
 		if runner.checkAllowed(config.RestartCommand, unit) && deferResponse(ctx) {
 			resultChan := make(chan string)
@@ -91,7 +82,7 @@ var commandHandlers = map[config.Command]func(ctx *commandCtx, runner *commandRu
 		}
 	},
 
-	config.StatusCommand: func(ctx *commandCtx, runner *commandRunnerImpl) {
+	config.StatusCommand: func(ctx *commandCtx, runner *commandRunner) {
 		if len(ctx.options) == 0 {
 			lines := lo.FilterMap(runner.units[config.StatusCommand], func(unit string, _ int) (string, bool) {
 				prop, err := runner.systemd.GetUnitPropertyContext(context.Background(), unit, "ActiveState")
@@ -120,23 +111,4 @@ var commandHandlers = map[config.Command]func(ctx *commandCtx, runner *commandRu
 			}
 		}
 	},
-}
-
-type commandRunnerImpl struct {
-	systemd systemd
-	units   map[config.Command][]string
-}
-
-func (runner *commandRunnerImpl) checkAllowed(command config.Command, value string) bool {
-	allowed := slices.Contains(runner.units[command], value)
-	if !allowed {
-		log.Println(string(command) + " is not an allowed command for " + value)
-	}
-	return allowed
-}
-
-func (runner *commandRunnerImpl) run(ctx *commandCtx) {
-	if handler, ok := commandHandlers[config.Command(ctx.commandName)]; ok {
-		handler(ctx, runner)
-	}
 }
