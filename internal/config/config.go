@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/samber/lo"
 )
 
 type Command string
@@ -108,10 +108,23 @@ func getConfigErrors(config tomlConfig) error {
 	return errors.Join(errs...)
 }
 
+func hasEveryPermission(u *unit, permissions []permission) bool {
+	for _, permission := range permissions {
+		if !slices.Contains(u.Permissions, permission) {
+			return false
+		}
+	}
+	return true
+}
+
 func getUnitsWithPermissions(units []*unit, permissions ...permission) []string {
-	return lo.FilterMap(units, func(unit *unit, _ int) (string, bool) {
-		return unit.Name, lo.Every(unit.Permissions, permissions)
-	})
+	value := []string{}
+	for _, unit := range units {
+		if hasEveryPermission(unit, permissions) {
+			value = append(value, unit.Name)
+		}
+	}
+	return value
 }
 
 func ReadConfig(r io.Reader) (*Config, error) {

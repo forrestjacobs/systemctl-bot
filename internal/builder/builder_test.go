@@ -7,7 +7,6 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/forrestjacobs/systemctl-bot/internal/builder"
 	"github.com/forrestjacobs/systemctl-bot/internal/config"
-	"github.com/samber/lo"
 )
 
 type testDiscordSession struct {
@@ -48,17 +47,20 @@ func makeSubcommand(name, description string, options ...*discordgo.ApplicationC
 }
 
 func makeUnitOption(description string, required bool, units ...string) *discordgo.ApplicationCommandOption {
+	choices := []*discordgo.ApplicationCommandOptionChoice{}
+	for _, name := range units {
+		choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
+			Name:  name,
+			Value: name + ".service",
+		})
+	}
+
 	return &discordgo.ApplicationCommandOption{
 		Name:        "unit",
 		Type:        discordgo.ApplicationCommandOptionString,
 		Description: description,
 		Required:    required,
-		Choices: lo.Map(units, func(name string, _ int) *discordgo.ApplicationCommandOptionChoice {
-			return &discordgo.ApplicationCommandOptionChoice{
-				Name:  name,
-				Value: name + ".service",
-			}
-		}),
+		Choices:     choices,
 	}
 }
 

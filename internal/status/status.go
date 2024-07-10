@@ -5,7 +5,6 @@ import (
 
 	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/forrestjacobs/systemctl-bot/internal/config"
-	"github.com/samber/lo"
 )
 
 type SubscriptionSet interface {
@@ -39,9 +38,12 @@ func UpdateStatusFromUnits(discord DiscordSession, c *config.Config, set Subscri
 			for name, status := range statuses {
 				activeStates[name] = status.ActiveState == "active"
 			}
-			activeUnits := lo.FilterMap(units, func(unit string, _ int) (string, bool) {
-				return unit, activeStates[unit]
-			})
+			activeUnits := []string{}
+			for _, unit := range units {
+				if activeStates[unit] {
+					activeUnits = append(activeUnits, unit)
+				}
+			}
 			err := discord.UpdateGameStatus(0, strings.Join(activeUnits, ", "))
 			if err != nil {
 				errChan <- err

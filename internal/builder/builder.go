@@ -7,23 +7,24 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/forrestjacobs/systemctl-bot/internal/config"
-	"github.com/samber/lo"
 )
 
 type option = discordgo.ApplicationCommandOption
 
 func getUnitOption(description string, required bool, units []string) option {
+	choices := []*discordgo.ApplicationCommandOptionChoice{}
+	for _, unit := range units {
+		choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
+			Name:  strings.TrimSuffix(unit, ".service"),
+			Value: unit,
+		})
+	}
 	return option{
 		Name:        "unit",
 		Type:        discordgo.ApplicationCommandOptionString,
 		Description: description,
 		Required:    required,
-		Choices: lo.Map(units, func(unit string, _ int) *discordgo.ApplicationCommandOptionChoice {
-			return &discordgo.ApplicationCommandOptionChoice{
-				Name:  strings.TrimSuffix(unit, ".service"),
-				Value: unit,
-			}
-		}),
+		Choices:     choices,
 	}
 }
 

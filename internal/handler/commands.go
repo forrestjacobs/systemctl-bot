@@ -7,7 +7,6 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/forrestjacobs/systemctl-bot/internal/config"
-	"github.com/samber/lo"
 )
 
 func logError(err error) {
@@ -84,15 +83,19 @@ var commandHandlers = map[config.Command]func(ctx *commandCtx, runner *commandRu
 
 	config.StatusCommand: func(ctx *commandCtx, runner *commandRunner) {
 		if len(ctx.options) == 0 {
-			lines := lo.FilterMap(runner.units[config.StatusCommand], func(unit string, _ int) (string, bool) {
+			lines := []string{}
+			for _, unit := range runner.units[config.StatusCommand] {
 				prop, err := runner.systemd.GetUnitPropertyContext(context.Background(), unit, "ActiveState")
 				if err != nil {
 					log.Println("Error fetching unit state: ", err)
-					return unit + ": error getting status", true
+					lines = append(lines, unit+": error getting status")
+					continue
 				}
 				val := prop.Value.Value().(string)
-				return unit + ": " + val, val != "inactive"
-			})
+				if val != "inactive" {
+					lines = append(lines, unit+": "+val)
+				}
+			}
 
 			if len(lines) == 0 {
 				respond(ctx, "Nothing is active")
