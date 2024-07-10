@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"os"
 
@@ -32,8 +33,27 @@ func dieOnError(err error, code exitErrorCode) {
 	}
 }
 
+func getConfig() (*config.Config, error) {
+	const defaultPath = "/etc/systemctl-bot.toml"
+
+	var path string
+	flag.StringVar(&path, "config", defaultPath, "path to config file")
+	flag.StringVar(&path, "c", defaultPath, "path to config file (shorthand)")
+
+	// TODO: Implement all of Clap's options
+	flag.Parse()
+
+	configFileReader, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer configFileReader.Close()
+
+	return config.ReadConfig(configFileReader)
+}
+
 func main() {
-	c, err := config.GetConfig()
+	c, err := getConfig()
 	dieOnError(err, ConfigReadError)
 
 	conn, err := dbus.NewSystemdConnectionContext(context.Background())

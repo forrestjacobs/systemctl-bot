@@ -2,7 +2,6 @@ package config
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -107,25 +106,6 @@ func getConfigErrors(config tomlConfig) error {
 	}
 
 	return errors.Join(errs...)
-}
-
-func GetConfig() (*Config, error) {
-	var path string
-
-	const defaultPath = "/etc/systemctl-bot.toml"
-	flag.StringVar(&path, "config", defaultPath, "path to config file")
-	flag.StringVar(&path, "c", defaultPath, "path to config file (shorthand)")
-
-	// TODO: Implement all of Clap's options
-	flag.Parse()
-
-	reader, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer reader.Close()
-
-	return ReadConfig(reader)
 }
 
 func getUnitsWithPermissions(units []*unit, permissions ...permission) []string {
