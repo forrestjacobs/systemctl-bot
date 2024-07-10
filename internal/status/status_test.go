@@ -1,6 +1,7 @@
 package status_test
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 type mockSubscriptionSet struct {
 	mockCalls  [][]any
 	statusChan chan map[string]*dbus.UnitStatus
+	errChan    chan error
 }
 
 func (m *mockSubscriptionSet) Add(value string) {
@@ -20,27 +22,29 @@ func (m *mockSubscriptionSet) Add(value string) {
 
 func (m *mockSubscriptionSet) Subscribe() (<-chan map[string]*dbus.UnitStatus, <-chan error) {
 	m.mockCalls = append(m.mockCalls, []any{"Subscribe"})
-	return m.statusChan, nil
+	return m.statusChan, m.errChan
 }
 
 type mockDiscordSession struct {
 	updateChan chan []any
+	updateErr  error
 }
 
 func (d *mockDiscordSession) UpdateGameStatus(idle int, name string) (err error) {
 	d.updateChan <- []any{idle, name}
-	return nil
+	return d.updateErr
 }
 
 func TestUpdateStatusFromUnits(t *testing.T) {
 	s := mockSubscriptionSet{
 		statusChan: make(chan map[string]*dbus.UnitStatus),
+		errChan:    make(chan error, 1),
 	}
 	d := mockDiscordSession{
 		updateChan: make(chan []any),
 	}
 
-	status.UpdateStatusFromUnits(&d, &config.Config{
+	errChan := status.UpdateStatusFromUnits(&d, &config.Config{
 		Units: map[config.Command][]string{
 			config.StatusCommand: {"a.service", "b.service"},
 		},
@@ -52,6 +56,12 @@ func TestUpdateStatusFromUnits(t *testing.T) {
 		{"Subscribe"},
 	}) {
 		t.Error("Not equal")
+	}
+
+	s.errChan <- errors.New("Subscribe error")
+	err := <-errChan
+	if err.Error() != "Subscribe error" {
+		t.Error("Unexpected error")
 	}
 
 	s.statusChan <- map[string]*dbus.UnitStatus{
@@ -76,5 +86,18 @@ func TestUpdateStatusFromUnits(t *testing.T) {
 	call = <-d.updateChan
 	if !reflect.DeepEqual(call, []any{0, "a.service"}) {
 		t.Error("Not equal")
+	}
+
+	d.updateErr = errors.New("Update error")
+	s.statusChan <- map[string]*dbus.UnitStatus{
+		"a.service": {ActiveState: "inactive"},
+	}
+	call = <-d.updateChan
+	if !reflect.DeepEqual(call, []any{0, ""}) {
+		t.Error("Not equal")
+	}
+	err = <-errChan
+	if err.Error() != "Update error" {
+		t.Error("Unexpected error")
 	}
 }
