@@ -43,20 +43,20 @@ I wrote this bot because I wanted my friends to be able to log in to my small Mi
     permissions = ["status"] # only allow status checking
     ```
 
- 6. Check out this git repo and [build it using Cargo](https://doc.rust-lang.org/cargo/commands/cargo-build.html):
+ 6. Check out this git repo and [build it with Go](https://pkg.go.dev/cmd/go#hdr-Compile_packages_and_dependencies):
 
     ```sh
     # Assuming you already have git and cargo set up
     % cd /where/you/want/systemctl-bot/to/live
     % git clone https://github.com/forrestjacobs/systemctl-bot.git
     % cd systemctl-bot
-    % cargo build --release
+    % go build
     ```
 
  7. Run the bot with enough privileges for it to call systemctl. (Once you have this working, you'll probably want to set it up as a systemd service.)
 
     ```sh
-    % sudo ./target/release/systemctl-bot
+    % sudo ./systemctl-bot
     ```
 
  8. You can now control units by typing `/systemctl <start|stop|restart|status> [unit name]` in your Discord server!
