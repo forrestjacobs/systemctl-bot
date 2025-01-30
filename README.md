@@ -73,7 +73,7 @@ systemctl-bot reads its configuration from environment variables and from `/etc/
 | `command_type`   | `SBOT_COMMAND_TYPE`   | either "single" (default) or "multiple" | Whether to use a single `/systemctl` command, or separate `/start`, `/stop`, etc. commands. |
 | `units`          | N/A                   | array of [units](#unit-configuration)   | Units to control. See [unit configuration](#unit-configuration) below.                      |
 
-### Units configuration
+### Unit configuration
 
 List the units you want to control in the config file as [an array of tables](https://toml.io/en/v1.0.0#array-of-tables), like this:
 
