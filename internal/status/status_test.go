@@ -3,6 +3,7 @@ package status_test
 import (
 	"errors"
 	"reflect"
+	"sync/atomic"
 	"testing"
 
 	"github.com/coreos/go-systemd/v22/dbus"
@@ -27,12 +28,16 @@ func (m *mockSubscriptionSet) Subscribe() (<-chan map[string]*dbus.UnitStatus, <
 
 type mockDiscordSession struct {
 	updateChan chan []any
-	updateErr  error
+	shouldErr  atomic.Bool
 }
 
 func (d *mockDiscordSession) UpdateGameStatus(idle int, name string) (err error) {
 	d.updateChan <- []any{idle, name}
-	return d.updateErr
+	if d.shouldErr.Load() {
+		return errors.New("Update error")
+	} else {
+		return nil
+	}
 }
 
 func TestUpdateStatusFromUnits(t *testing.T) {
@@ -88,7 +93,7 @@ func TestUpdateStatusFromUnits(t *testing.T) {
 		t.Error("Not equal")
 	}
 
-	d.updateErr = errors.New("Update error")
+	d.shouldErr.Store(true)
 	s.statusChan <- map[string]*dbus.UnitStatus{
 		"a.service": {ActiveState: "inactive"},
 	}
