@@ -57,7 +57,7 @@ func AddHandler(session DiscordSession, systemd Systemd, c *config.Config) {
 		systemd: systemd,
 		units:   c.Units,
 	}
-	session.AddHandler(func(session DiscordSession, event *discordgo.InteractionCreate) {
+	session.AddHandler(func(s *discordgo.Session, event *discordgo.InteractionCreate) {
 		if event.Type != discordgo.InteractionApplicationCommand {
 			return
 		}

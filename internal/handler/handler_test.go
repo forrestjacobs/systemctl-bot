@@ -118,7 +118,7 @@ func makeSystemdInteraction(command config.Command, options ...*discordgo.Applic
 
 func callHandler(mocks *handlerMocks, config *config.Config, interaction *discordgo.Interaction) {
 	handler.AddHandler(mocks, mocks, config)
-	mocks.handler.(func(session handler.DiscordSession, event *discordgo.InteractionCreate))(mocks, &discordgo.InteractionCreate{
+	mocks.handler.(func(session *discordgo.Session, event *discordgo.InteractionCreate))(nil, &discordgo.InteractionCreate{
 		Interaction: interaction,
 	})
 }
