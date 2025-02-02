@@ -70,4 +70,6 @@ func main() {
 	dieOnError(builder.RegisterCommands(discord, c), DiscordSetCommandError)
 
 	status.UpdateStatusFromUnits(discord, c, conn.NewSubscriptionSet())
+
+	select {}
 }
