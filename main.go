@@ -69,8 +69,5 @@ func main() {
 
 	dieOnError(builder.RegisterCommands(discord, c), DiscordSetCommandError)
 
-	errChan := status.UpdateStatusFromUnits(discord, c, conn.NewSubscriptionSet())
-	for err := range errChan {
-		log.Println("Error listening to dbus events: ", err)
-	}
+	status.UpdateStatusFromUnits(discord, c, conn.NewSubscriptionSet())
 }

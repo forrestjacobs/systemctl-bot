@@ -16,19 +16,16 @@ type DiscordSession interface {
 	UpdateGameStatus(idle int, name string) (err error)
 }
 
-func UpdateStatusFromUnits(discord DiscordSession, c *config.Config, set SubscriptionSet) <-chan error {
+func UpdateStatusFromUnits(discord DiscordSession, c *config.Config, set SubscriptionSet) {
 	units := c.Units[config.StatusCommand]
 	for _, unit := range units {
 		set.Add(unit)
 	}
 
-	statusChan, setErrChan := set.Subscribe()
-
-	errChan := make(chan error)
-
+	statusChan, errChan := set.Subscribe()
 	go func() {
-		for err := range setErrChan {
-			errChan <- err
+		for err := range errChan {
+			println("Error subscribing to units: ", err)
 		}
 	}()
 
@@ -46,10 +43,8 @@ func UpdateStatusFromUnits(discord DiscordSession, c *config.Config, set Subscri
 			}
 			err := discord.UpdateGameStatus(0, strings.Join(activeUnits, ", "))
 			if err != nil {
-				errChan <- err
+				println("Error listening to dbus events: ", err)
 			}
 		}
 	}()
-
-	return errChan
 }

@@ -1,9 +1,7 @@
 package status_test
 
 import (
-	"errors"
 	"reflect"
-	"sync/atomic"
 	"testing"
 
 	"github.com/coreos/go-systemd/v22/dbus"
@@ -28,16 +26,11 @@ func (m *mockSubscriptionSet) Subscribe() (<-chan map[string]*dbus.UnitStatus, <
 
 type mockDiscordSession struct {
 	updateChan chan []any
-	shouldErr  atomic.Bool
 }
 
 func (d *mockDiscordSession) UpdateGameStatus(idle int, name string) (err error) {
 	d.updateChan <- []any{idle, name}
-	if d.shouldErr.Load() {
-		return errors.New("Update error")
-	} else {
-		return nil
-	}
+	return nil
 }
 
 func TestUpdateStatusFromUnits(t *testing.T) {
@@ -49,7 +42,7 @@ func TestUpdateStatusFromUnits(t *testing.T) {
 		updateChan: make(chan []any),
 	}
 
-	errChan := status.UpdateStatusFromUnits(&d, &config.Config{
+	status.UpdateStatusFromUnits(&d, &config.Config{
 		Units: map[config.Command][]string{
 			config.StatusCommand: {"a.service", "b.service"},
 		},
@@ -61,12 +54,6 @@ func TestUpdateStatusFromUnits(t *testing.T) {
 		{"Subscribe"},
 	}) {
 		t.Error("Not equal")
-	}
-
-	s.errChan <- errors.New("Subscribe error")
-	err := <-errChan
-	if err.Error() != "Subscribe error" {
-		t.Error("Unexpected error")
 	}
 
 	s.statusChan <- map[string]*dbus.UnitStatus{
@@ -93,16 +80,11 @@ func TestUpdateStatusFromUnits(t *testing.T) {
 		t.Error("Not equal")
 	}
 
-	d.shouldErr.Store(true)
 	s.statusChan <- map[string]*dbus.UnitStatus{
 		"a.service": {ActiveState: "inactive"},
 	}
 	call = <-d.updateChan
 	if !reflect.DeepEqual(call, []any{0, ""}) {
 		t.Error("Not equal")
-	}
-	err = <-errChan
-	if err.Error() != "Update error" {
-		t.Error("Unexpected error")
 	}
 }
