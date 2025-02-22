@@ -5,35 +5,57 @@ mod handler;
 mod systemctl;
 mod systemd_status;
 
-use crate::config::get_config;
-use clap::Parser;
-use handler::Handler;
+use config::{ConfigProvider, ConfigProviderImpl};
+use handler::{Handler, HandlerImpl};
+use serenity::async_trait;
 use serenity::client::Client;
+use serenity::client::Context;
+use serenity::client::EventHandler;
+use serenity::model::application::interaction::Interaction;
 use serenity::model::gateway::GatewayIntents;
-use serenity::model::id::GuildId;
+use serenity::model::gateway::Ready;
+use shaku::{module, HasComponent};
+use std::sync::Arc;
+use systemd_status::SystemdStatusManagerImpl;
+use systemd_status::SystemdStatusManagerImplParameters;
 
-#[derive(Parser, Debug)]
-#[clap(version, about, long_about = None)]
-struct Args {
-    #[clap(short, long, default_value = "/etc/systemctl-bot.toml")]
-    config: String,
+module! {
+    RootModule {
+        components = [ConfigProviderImpl, SystemdStatusManagerImpl, HandlerImpl],
+        providers = [],
+    }
+}
+
+struct HandlerWrapper(Arc<dyn Handler>);
+
+#[async_trait]
+impl EventHandler for HandlerWrapper {
+    async fn ready(&self, ctx: Context, _data_about_bot: Ready) {
+        self.0.ready(ctx).await;
+    }
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        self.0.interaction_create(ctx, interaction).await;
+    }
 }
 
 #[tokio::main]
 async fn main() {
-    let args = Args::parse();
+    let module = RootModule::builder()
+        .with_component_parameters::<SystemdStatusManagerImpl>(SystemdStatusManagerImplParameters {
+            client: systemd_status::get_client().await.unwrap(),
+        })
+        .build();
 
-    let config = get_config(args.config).unwrap();
+    let config_provider: &dyn ConfigProvider = module.resolve_ref();
+    let config = config_provider.get();
 
-    let handler = Handler::new(GuildId(config.guild_id), config.command_type, config.units)
-        .await
-        .unwrap();
+    let handler: Arc<dyn Handler> = module.resolve();
 
     let mut client = Client::builder(
-        config.discord_token,
+        &config_provider.get().discord_token,
         GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
     )
-    .event_handler(handler)
+    .event_handler(HandlerWrapper(handler))
     .application_id(config.application_id)
     .await
     .unwrap();

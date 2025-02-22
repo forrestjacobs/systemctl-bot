@@ -1,6 +1,6 @@
 use crate::config::{Unit, UnitPermission};
 use crate::systemctl::{restart, start, stop, SystemctlError};
-use crate::systemd_status::SystemdStatusManager;
+use crate::systemd_status::{statuses, SystemdStatusManager};
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -55,9 +55,9 @@ fn ensure_allowed(unit: &Unit, permission: UnitPermission) -> Result<(), UserCom
 }
 
 impl UserCommand<'_> {
-    pub async fn run(
+    pub async fn run<M: SystemdStatusManager + ?Sized>(
         &self,
-        systemd_status_manager: &SystemdStatusManager,
+        systemd_status_manager: &M,
     ) -> Result<String, UserCommandError> {
         match self {
             UserCommand::Start { unit } => {
@@ -85,9 +85,11 @@ impl UserCommand<'_> {
                     ensure_allowed(unit, UnitPermission::Status)?;
                 }
 
-                let statuses = systemd_status_manager
-                    .statuses(units.iter().map(|u| u.name.as_str()))
-                    .await;
+                let statuses = statuses(
+                    systemd_status_manager,
+                    units.iter().map(|u| u.name.as_str()),
+                )
+                .await;
                 let status_lines = statuses
                     .into_iter()
                     .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))

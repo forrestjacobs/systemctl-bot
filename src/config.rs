@@ -1,6 +1,8 @@
+use clap::Parser;
 use config::Config;
 use indexmap::IndexMap;
 use serde::{self, Deserialize, Deserializer};
+use shaku::{Component, Interface, Module, ModuleBuildContext};
 use std::collections::HashSet;
 
 #[derive(Deserialize, Hash, PartialEq, Eq)]
@@ -65,10 +67,37 @@ where
     Ok(units)
 }
 
-pub fn get_config(path: String) -> Result<SystemctlBotConfig, Box<dyn std::error::Error>> {
-    Ok(Config::builder()
-        .add_source(config::File::with_name(&path))
-        .add_source(config::Environment::with_prefix("SBOT"))
-        .build()?
-        .try_deserialize()?)
+pub trait ConfigProvider: Interface {
+    fn get(&self) -> &SystemctlBotConfig;
+}
+
+pub struct ConfigProviderImpl(SystemctlBotConfig);
+impl ConfigProvider for ConfigProviderImpl {
+    fn get(&self) -> &SystemctlBotConfig {
+        &self.0
+    }
+}
+
+#[derive(Parser, Debug)]
+#[clap(version, about, long_about = None)]
+struct Args {
+    #[clap(short, long, default_value = "/etc/systemctl-bot.toml")]
+    config: String,
+}
+
+impl<M: Module> Component<M> for ConfigProviderImpl {
+    type Interface = dyn ConfigProvider;
+    type Parameters = ();
+
+    fn build(_context: &mut ModuleBuildContext<M>, _params: ()) -> Box<dyn ConfigProvider> {
+        let args = Args::parse();
+        let config = Config::builder()
+            .add_source(config::File::with_name(&args.config))
+            .add_source(config::Environment::with_prefix("SBOT"))
+            .build()
+            .unwrap()
+            .try_deserialize()
+            .unwrap();
+        Box::new(ConfigProviderImpl(config))
+    }
 }

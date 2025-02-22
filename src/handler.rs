@@ -1,44 +1,42 @@
 use crate::builder::build_commands;
 use crate::command::UserCommand;
-use crate::config::{CommandType, Unit, UnitPermission};
-use crate::systemd_status::SystemdStatusManager;
+use crate::config::{CommandType, ConfigProvider, Unit, UnitPermission};
+use crate::systemd_status::{statuses, SystemdStatusManager};
+use async_trait::async_trait;
 use futures::future::join_all;
 use futures::StreamExt;
-use indexmap::IndexMap;
-use serenity::async_trait;
-use serenity::client::{Context, EventHandler};
+use serenity::client::Context;
 use serenity::model::application::interaction::application_command::{
     ApplicationCommandInteraction, CommandDataOption, CommandDataOptionValue,
 };
 use serenity::model::application::interaction::{Interaction, InteractionResponseType};
-use serenity::model::gateway::{Activity, Ready};
+use serenity::model::gateway::Activity;
 use serenity::model::id::GuildId;
+use shaku::{Component, Interface};
+use std::sync::Arc;
 use tokio_stream::StreamMap;
 use zbus::PropertyStream;
 
-pub struct Handler {
-    pub guild_id: GuildId,
-    pub command_type: CommandType,
-    pub units: IndexMap<String, Unit>,
-    systemd_status_manager: SystemdStatusManager,
+#[async_trait]
+pub trait Handler: Interface {
+    async fn ready(&self, ctx: Context);
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction);
 }
 
-impl Handler {
-    pub async fn new(
-        guild_id: GuildId,
-        command_type: CommandType,
-        units: IndexMap<String, Unit>,
-    ) -> Result<Handler, zbus::Error> {
-        Ok(Handler {
-            guild_id,
-            command_type,
-            units,
-            systemd_status_manager: SystemdStatusManager::new().await?,
-        })
-    }
+#[derive(Component)]
+#[shaku(interface = Handler)]
+pub struct HandlerImpl {
+    #[shaku(inject)]
+    config_provider: Arc<dyn ConfigProvider>,
+    #[shaku(inject)]
+    systemd_status_manager: Arc<dyn SystemdStatusManager>,
+}
 
+impl HandlerImpl {
     fn units_that_allow_status_iter(&self) -> impl Iterator<Item = &Unit> {
-        self.units
+        self.config_provider
+            .get()
+            .units
             .values()
             .filter(|unit| unit.permissions.contains(&UnitPermission::Status))
     }
@@ -65,7 +63,7 @@ impl Handler {
         let units = self
             .units_that_allow_status_iter()
             .map(|unit| unit.name.as_str());
-        let statuses = self.systemd_status_manager.statuses(units).await;
+        let statuses = statuses(self.systemd_status_manager.as_ref(), units).await;
         let active_units = statuses
             .into_iter()
             .filter(|(_, status)| status.as_ref().map_or(false, |status| status == "active"))
@@ -82,13 +80,15 @@ impl Handler {
 
     fn get_unit_from_opt(&self, option: &CommandDataOption) -> Option<&Unit> {
         match &option.resolved {
-            Some(CommandDataOptionValue::String(name)) => self.units.get(name),
+            Some(CommandDataOptionValue::String(name)) => {
+                self.config_provider.get().units.get(name)
+            }
             _ => None,
         }
     }
 
     fn parse_command(&self, interaction: &ApplicationCommandInteraction) -> Option<UserCommand> {
-        let (name, options) = match self.command_type {
+        let (name, options) = match self.config_provider.get().command_type {
             CommandType::Single => {
                 let sub = interaction.data.options.get(0)?;
                 (&sub.name, &sub.options)
@@ -119,11 +119,19 @@ impl Handler {
 }
 
 #[async_trait]
-impl EventHandler for Handler {
-    async fn ready(&self, ctx: Context, _: Ready) {
-        GuildId::set_application_commands(&self.guild_id, &ctx.http, |builder| {
-            build_commands(&self.units, &self.command_type, builder)
-        })
+impl Handler for HandlerImpl {
+    async fn ready(&self, ctx: Context) {
+        GuildId::set_application_commands(
+            &GuildId(self.config_provider.get().guild_id),
+            &ctx.http,
+            |builder| {
+                build_commands(
+                    &self.config_provider.get().units,
+                    &self.config_provider.get().command_type,
+                    builder,
+                )
+            },
+        )
         .await
         .unwrap();
 
@@ -144,10 +152,11 @@ impl EventHandler for Handler {
                         })
                         .await
                         .unwrap();
-                    let response_content = match command.run(&self.systemd_status_manager).await {
-                        Ok(value) => value,
-                        Err(value) => value.to_string(),
-                    };
+                    let response_content =
+                        match command.run(self.systemd_status_manager.as_ref()).await {
+                            Ok(value) => value,
+                            Err(value) => value.to_string(),
+                        };
                     interaction
                         .create_followup_message(&ctx.http, |response| {
                             response.content(response_content)
