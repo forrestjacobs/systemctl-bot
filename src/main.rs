@@ -5,16 +5,13 @@ mod handler;
 mod systemctl;
 mod systemd_status;
 
+use async_trait::async_trait;
 use command::CommandRunnerImpl;
 use config::{Config, ConfigImpl};
 use handler::{Handler, HandlerImpl};
-use serenity::async_trait;
-use serenity::client::Client;
-use serenity::client::Context;
-use serenity::client::EventHandler;
-use serenity::model::application::interaction::Interaction;
-use serenity::model::gateway::GatewayIntents;
-use serenity::model::gateway::Ready;
+use serenity::all::{
+    ApplicationId, Client, Context, EventHandler, GatewayIntents, Interaction, Ready,
+};
 use shaku::{module, HasComponent};
 use std::sync::Arc;
 use systemd_status::SystemdStatusManagerImpl;
@@ -55,7 +52,7 @@ async fn main() {
         GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
     )
     .event_handler(HandlerWrapper(handler))
-    .application_id(config.application_id)
+    .application_id(ApplicationId::new(config.application_id))
     .await
     .unwrap();
 

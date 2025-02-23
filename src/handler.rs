@@ -5,13 +5,11 @@ use crate::systemd_status::{statuses, SystemdStatusManager};
 use async_trait::async_trait;
 use futures::future::join_all;
 use futures::StreamExt;
-use serenity::client::Context;
-use serenity::model::application::interaction::application_command::{
-    ApplicationCommandInteraction, CommandDataOption, CommandDataOptionValue,
+use serenity::all::{
+    ActivityData, CommandDataOption, CommandDataOptionValue, CommandInteraction, Context,
+    CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage,
+    GuildId, Interaction,
 };
-use serenity::model::application::interaction::{Interaction, InteractionResponseType};
-use serenity::model::gateway::Activity;
-use serenity::model::id::GuildId;
 use shaku::{Component, Interface};
 use std::sync::Arc;
 use tokio_stream::StreamMap;
@@ -64,25 +62,29 @@ impl HandlerImpl {
             .collect::<Vec<&str>>();
 
         if active_units.is_empty() {
-            ctx.reset_presence().await;
+            ctx.reset_presence();
         } else {
-            let activity = Activity::playing(active_units.join(", "));
-            ctx.set_activity(activity).await;
+            let activity = ActivityData::playing(active_units.join(", "));
+            ctx.set_activity(Some(activity));
         }
     }
 
     fn get_unit_from_opt(&self, option: &CommandDataOption) -> Option<String> {
-        match &option.resolved {
-            Some(CommandDataOptionValue::String(name)) => Some(name.clone()),
+        match &option.value {
+            CommandDataOptionValue::String(name) => Some(name.clone()),
             _ => None,
         }
     }
 
-    fn parse_command(&self, interaction: &ApplicationCommandInteraction) -> Option<UserCommand> {
+    fn parse_command(&self, interaction: &CommandInteraction) -> Option<UserCommand> {
         let (name, options) = match self.config.command_type {
             CommandType::Single => {
                 let sub = interaction.data.options.get(0)?;
-                (&sub.name, &sub.options)
+                if let CommandDataOptionValue::SubCommand(opts) = &sub.value {
+                    (&sub.name, opts)
+                } else {
+                    return None;
+                }
             }
             CommandType::Multiple => (&interaction.data.name, &interaction.data.options),
         };
@@ -112,11 +114,13 @@ impl HandlerImpl {
 #[async_trait]
 impl Handler for HandlerImpl {
     async fn ready(&self, ctx: Context) {
-        GuildId::set_application_commands(&GuildId(self.config.guild_id), &ctx.http, |builder| {
-            build_commands(&self.config.units, &self.config.command_type, builder)
-        })
-        .await
-        .unwrap();
+        GuildId::new(self.config.guild_id)
+            .set_commands(
+                &ctx.http,
+                build_commands(&self.config.units, &self.config.command_type),
+            )
+            .await
+            .unwrap();
 
         let mut stream = self.update_activity_stream().await.unwrap();
         self.update_activity(&ctx).await;
@@ -126,13 +130,16 @@ impl Handler for HandlerImpl {
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        if let Interaction::ApplicationCommand(interaction) = interaction {
+        if let Interaction::Command(interaction) = interaction {
             match self.parse_command(&interaction) {
                 Some(command) => {
                     interaction
-                        .create_interaction_response(&ctx.http, |response| {
-                            response.kind(InteractionResponseType::DeferredChannelMessageWithSource)
-                        })
+                        .create_response(
+                            &ctx.http,
+                            CreateInteractionResponse::Defer(
+                                CreateInteractionResponseMessage::new(),
+                            ),
+                        )
                         .await
                         .unwrap();
                     let response_content = match self.command_runner.run(&command).await {
@@ -140,19 +147,21 @@ impl Handler for HandlerImpl {
                         Err(value) => value.to_string(),
                     };
                     interaction
-                        .create_followup_message(&ctx.http, |response| {
-                            response.content(response_content)
-                        })
+                        .create_followup(
+                            &ctx.http,
+                            CreateInteractionResponseFollowup::new().content(response_content),
+                        )
                         .await
                         .unwrap();
                 }
                 _ => {
                     interaction
-                        .create_interaction_response(&ctx.http, |response| {
-                            response
-                                .kind(InteractionResponseType::ChannelMessageWithSource)
-                                .interaction_response_data(|data| data.content("Invalid command"))
-                        })
+                        .create_response(
+                            &ctx.http,
+                            CreateInteractionResponse::Message(
+                                CreateInteractionResponseMessage::new().content("Invalid command"),
+                            ),
+                        )
                         .await
                         .unwrap();
                 }

@@ -1,6 +1,5 @@
 use crate::config::{Command, CommandType};
-use serenity::builder::{CreateApplicationCommandOption, CreateApplicationCommands};
-use serenity::model::application::command::CommandOptionType;
+use serenity::all::{CommandOptionType, CreateCommand, CreateCommandOption};
 use std::collections::HashMap;
 
 struct UnitOption<'a> {
@@ -9,20 +8,14 @@ struct UnitOption<'a> {
     required: bool,
 }
 
-fn setup_unit_option<'a>(
-    builder: &'a mut CreateApplicationCommandOption,
-    unit_option: &UnitOption<'_>,
-) -> &'a mut CreateApplicationCommandOption {
-    builder
-        .name("unit")
-        .kind(CommandOptionType::String)
-        .description(unit_option.description)
-        .required(unit_option.required);
-    for unit in unit_option.units {
+fn setup_unit_option<'a>(unit_option: &'a UnitOption<'_>) -> CreateCommandOption {
+    let option =
+        CreateCommandOption::new(CommandOptionType::String, "unit", unit_option.description)
+            .required(unit_option.required);
+    unit_option.units.iter().fold(option, |option, unit| {
         let alias = unit.strip_suffix(".service").unwrap_or(unit);
-        builder.add_string_choice(alias, unit);
-    }
-    builder
+        option.add_string_choice(alias, unit)
+    })
 }
 
 fn create_commands<F>(units: &HashMap<Command, Vec<String>>, mut register: F)
@@ -73,30 +66,36 @@ where
 pub fn build_commands<'a>(
     units: &HashMap<Command, Vec<String>>,
     command_type: &CommandType,
-    builder: &'a mut CreateApplicationCommands,
-) -> &'a mut CreateApplicationCommands {
+) -> Vec<CreateCommand> {
     match command_type {
-        CommandType::Single => builder.create_application_command(|builder| {
-            builder.name("systemctl").description("Controls units");
+        CommandType::Single => {
+            let mut options = Vec::new();
             create_commands(units, |name, description, unit_option| {
-                builder.create_option(|o| {
-                    o.name(name)
-                        .description(description)
-                        .kind(CommandOptionType::SubCommand)
-                        .create_sub_option(|opt| setup_unit_option(opt, &unit_option))
-                });
+                options.push(
+                    CreateCommandOption::new(
+                        serenity::all::CommandOptionType::SubCommand,
+                        name,
+                        description,
+                    )
+                    .add_sub_option(setup_unit_option(&unit_option)),
+                );
             });
-            builder
-        }),
+            let command = CreateCommand::new("systemctl").description("Controls units");
+            let command = options
+                .into_iter()
+                .fold(command, |command, option| command.add_option(option));
+            vec![command]
+        }
         CommandType::Multiple => {
+            let mut commands = Vec::new();
             create_commands(units, |name, description, unit_option| {
-                builder.create_application_command(|c| {
-                    c.name(name)
+                commands.push(
+                    CreateCommand::new(name)
                         .description(description)
-                        .create_option(|opt| setup_unit_option(opt, &unit_option))
-                });
+                        .add_option(setup_unit_option(&unit_option)),
+                );
             });
-            builder
+            commands
         }
     }
 }
