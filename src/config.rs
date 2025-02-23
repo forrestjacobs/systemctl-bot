@@ -1,9 +1,8 @@
 use clap::Parser;
-use config::Config;
 use indexmap::IndexMap;
 use serde::{self, Deserialize, Deserializer};
 use shaku::{Component, Interface, Module, ModuleBuildContext};
-use std::collections::HashSet;
+use std::{collections::HashSet, ops::Deref};
 
 #[derive(Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -67,12 +66,19 @@ where
     Ok(units)
 }
 
-pub trait ConfigProvider: Interface {
+pub trait Config: Interface {
     fn get(&self) -> &SystemctlBotConfig;
 }
 
-pub struct ConfigProviderImpl(SystemctlBotConfig);
-impl ConfigProvider for ConfigProviderImpl {
+impl Deref for dyn Config {
+    type Target = SystemctlBotConfig;
+    fn deref(&self) -> &SystemctlBotConfig {
+        self.get()
+    }
+}
+
+pub struct ConfigImpl(SystemctlBotConfig);
+impl Config for ConfigImpl {
     fn get(&self) -> &SystemctlBotConfig {
         &self.0
     }
@@ -85,19 +91,19 @@ struct Args {
     config: String,
 }
 
-impl<M: Module> Component<M> for ConfigProviderImpl {
-    type Interface = dyn ConfigProvider;
+impl<M: Module> Component<M> for ConfigImpl {
+    type Interface = dyn Config;
     type Parameters = ();
 
-    fn build(_context: &mut ModuleBuildContext<M>, _params: ()) -> Box<dyn ConfigProvider> {
+    fn build(_context: &mut ModuleBuildContext<M>, _params: ()) -> Box<dyn Config> {
         let args = Args::parse();
-        let config = Config::builder()
+        let config = config::Config::builder()
             .add_source(config::File::with_name(&args.config))
             .add_source(config::Environment::with_prefix("SBOT"))
             .build()
             .unwrap()
             .try_deserialize()
             .unwrap();
-        Box::new(ConfigProviderImpl(config))
+        Box::new(ConfigImpl(config))
     }
 }

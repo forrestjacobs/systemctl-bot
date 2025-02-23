@@ -1,6 +1,6 @@
 use crate::builder::build_commands;
 use crate::command::UserCommand;
-use crate::config::{CommandType, ConfigProvider, Unit, UnitPermission};
+use crate::config::{CommandType, Config, Unit, UnitPermission};
 use crate::systemd_status::{statuses, SystemdStatusManager};
 use async_trait::async_trait;
 use futures::future::join_all;
@@ -27,15 +27,14 @@ pub trait Handler: Interface {
 #[shaku(interface = Handler)]
 pub struct HandlerImpl {
     #[shaku(inject)]
-    config_provider: Arc<dyn ConfigProvider>,
+    config: Arc<dyn Config>,
     #[shaku(inject)]
     systemd_status_manager: Arc<dyn SystemdStatusManager>,
 }
 
 impl HandlerImpl {
     fn units_that_allow_status_iter(&self) -> impl Iterator<Item = &Unit> {
-        self.config_provider
-            .get()
+        self.config
             .units
             .values()
             .filter(|unit| unit.permissions.contains(&UnitPermission::Status))
@@ -80,15 +79,13 @@ impl HandlerImpl {
 
     fn get_unit_from_opt(&self, option: &CommandDataOption) -> Option<&Unit> {
         match &option.resolved {
-            Some(CommandDataOptionValue::String(name)) => {
-                self.config_provider.get().units.get(name)
-            }
+            Some(CommandDataOptionValue::String(name)) => self.config.units.get(name),
             _ => None,
         }
     }
 
     fn parse_command(&self, interaction: &ApplicationCommandInteraction) -> Option<UserCommand> {
-        let (name, options) = match self.config_provider.get().command_type {
+        let (name, options) = match self.config.command_type {
             CommandType::Single => {
                 let sub = interaction.data.options.get(0)?;
                 (&sub.name, &sub.options)
@@ -121,17 +118,9 @@ impl HandlerImpl {
 #[async_trait]
 impl Handler for HandlerImpl {
     async fn ready(&self, ctx: Context) {
-        GuildId::set_application_commands(
-            &GuildId(self.config_provider.get().guild_id),
-            &ctx.http,
-            |builder| {
-                build_commands(
-                    &self.config_provider.get().units,
-                    &self.config_provider.get().command_type,
-                    builder,
-                )
-            },
-        )
+        GuildId::set_application_commands(&GuildId(self.config.guild_id), &ctx.http, |builder| {
+            build_commands(&self.config.units, &self.config.command_type, builder)
+        })
         .await
         .unwrap();
 

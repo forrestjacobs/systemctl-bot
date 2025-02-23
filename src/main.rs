@@ -5,7 +5,7 @@ mod handler;
 mod systemctl;
 mod systemd_status;
 
-use config::{ConfigProvider, ConfigProviderImpl};
+use config::{Config, ConfigImpl};
 use handler::{Handler, HandlerImpl};
 use serenity::async_trait;
 use serenity::client::Client;
@@ -21,7 +21,7 @@ use systemd_status::SystemdStatusManagerImplParameters;
 
 module! {
     RootModule {
-        components = [ConfigProviderImpl, SystemdStatusManagerImpl, HandlerImpl],
+        components = [ConfigImpl, SystemdStatusManagerImpl, HandlerImpl],
         providers = [],
     }
 }
@@ -46,13 +46,11 @@ async fn main() {
         })
         .build();
 
-    let config_provider: &dyn ConfigProvider = module.resolve_ref();
-    let config = config_provider.get();
-
+    let config: &dyn Config = module.resolve_ref();
     let handler: Arc<dyn Handler> = module.resolve();
 
     let mut client = Client::builder(
-        &config_provider.get().discord_token,
+        &config.discord_token,
         GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
     )
     .event_handler(HandlerWrapper(handler))
