@@ -5,6 +5,7 @@ mod handler;
 mod systemctl;
 mod systemd_status;
 
+use command::CommandRunnerImpl;
 use config::{Config, ConfigImpl};
 use handler::{Handler, HandlerImpl};
 use serenity::async_trait;
@@ -21,7 +22,7 @@ use systemd_status::SystemdStatusManagerImplParameters;
 
 module! {
     RootModule {
-        components = [ConfigImpl, SystemdStatusManagerImpl, HandlerImpl],
+        components = [CommandRunnerImpl, ConfigImpl, SystemdStatusManagerImpl, HandlerImpl],
         providers = [],
     }
 }

@@ -1,5 +1,5 @@
 use crate::builder::build_commands;
-use crate::command::UserCommand;
+use crate::command::{CommandRunner, UserCommand};
 use crate::config::{Command, CommandType, Config};
 use crate::systemd_status::{statuses, SystemdStatusManager};
 use async_trait::async_trait;
@@ -30,6 +30,8 @@ pub struct HandlerImpl {
     config: Arc<dyn Config>,
     #[shaku(inject)]
     systemd_status_manager: Arc<dyn SystemdStatusManager>,
+    #[shaku(inject)]
+    command_runner: Arc<dyn CommandRunner>,
 }
 
 impl HandlerImpl {
@@ -133,10 +135,7 @@ impl Handler for HandlerImpl {
                         })
                         .await
                         .unwrap();
-                    let response_content = match command
-                        .run(self.systemd_status_manager.as_ref(), self.config.as_ref())
-                        .await
-                    {
+                    let response_content = match self.command_runner.run(&command).await {
                         Ok(value) => value,
                         Err(value) => value.to_string(),
                     };

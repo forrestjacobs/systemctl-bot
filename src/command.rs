@@ -1,9 +1,12 @@
 use crate::config::{Command, Config};
 use crate::systemctl::{restart, start, stop, SystemctlError};
 use crate::systemd_status::{statuses, SystemdStatusManager};
+use async_trait::async_trait;
+use shaku::{Component, Interface};
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 
 pub enum UserCommand {
     Start { unit: String },
@@ -14,83 +17,95 @@ pub enum UserCommand {
 }
 
 #[derive(Debug)]
-pub enum UserCommandError {
+pub enum CommandRunnerError {
     SystemctlError(SystemctlError),
     ZbusError(zbus::Error),
     NotAllowed,
 }
 
-impl Display for UserCommandError {
+impl Display for CommandRunnerError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            UserCommandError::SystemctlError(e) => write!(f, "{}", e),
-            UserCommandError::ZbusError(e) => write!(f, "{}", e),
-            UserCommandError::NotAllowed => {
+            CommandRunnerError::SystemctlError(e) => write!(f, "{}", e),
+            CommandRunnerError::ZbusError(e) => write!(f, "{}", e),
+            CommandRunnerError::NotAllowed => {
                 write!(f, "Command is not allowed")
             }
         }
     }
 }
 
-impl Error for UserCommandError {}
+impl Error for CommandRunnerError {}
 
-impl From<SystemctlError> for UserCommandError {
+impl From<SystemctlError> for CommandRunnerError {
     fn from(error: SystemctlError) -> Self {
-        UserCommandError::SystemctlError(error)
+        CommandRunnerError::SystemctlError(error)
     }
 }
 
-impl From<zbus::Error> for UserCommandError {
+impl From<zbus::Error> for CommandRunnerError {
     fn from(error: zbus::Error) -> Self {
-        UserCommandError::ZbusError(error)
+        CommandRunnerError::ZbusError(error)
     }
 }
 
-fn ensure_allowed<C: Config + ?Sized>(
-    unit: &String,
-    command: Command,
-    config: &C,
-) -> Result<(), UserCommandError> {
-    if config.get().units[&command].contains(unit) {
-        Ok(())
-    } else {
-        Err(UserCommandError::NotAllowed)
+#[async_trait]
+pub trait CommandRunner: Interface {
+    async fn run(&self, command: &UserCommand) -> Result<String, CommandRunnerError>;
+}
+
+#[derive(Component)]
+#[shaku(interface = CommandRunner)]
+pub struct CommandRunnerImpl {
+    #[shaku(inject)]
+    config: Arc<dyn Config>,
+    #[shaku(inject)]
+    systemd_status_manager: Arc<dyn SystemdStatusManager>,
+}
+
+impl CommandRunnerImpl {
+    fn ensure_allowed(&self, unit: &String, command: Command) -> Result<(), CommandRunnerError> {
+        if self.config.units[&command].contains(unit) {
+            Ok(())
+        } else {
+            Err(CommandRunnerError::NotAllowed)
+        }
     }
 }
 
-impl UserCommand {
-    pub async fn run<M: SystemdStatusManager + ?Sized, C: Config + ?Sized>(
-        &self,
-        systemd_status_manager: &M,
-        config: &C,
-    ) -> Result<String, UserCommandError> {
-        match self {
+#[async_trait]
+impl CommandRunner for CommandRunnerImpl {
+    async fn run(&self, command: &UserCommand) -> Result<String, CommandRunnerError> {
+        match command {
             UserCommand::Start { unit } => {
-                ensure_allowed(unit, Command::Start, config)?;
+                self.ensure_allowed(unit, Command::Start)?;
                 start(unit).await?;
                 Ok(format!("Started {}", unit))
             }
             UserCommand::Stop { unit } => {
-                ensure_allowed(unit, Command::Stop, config)?;
+                self.ensure_allowed(unit, Command::Stop)?;
                 stop(unit).await?;
                 Ok(format!("Stopped {}", unit))
             }
             UserCommand::Restart { unit } => {
-                ensure_allowed(unit, Command::Restart, config)?;
+                self.ensure_allowed(unit, Command::Restart)?;
                 restart(unit).await?;
                 Ok(format!("Restarted {}", unit))
             }
             UserCommand::SingleStatus { unit } => {
-                ensure_allowed(unit, Command::Status, config)?;
-                Ok(systemd_status_manager.status(unit.as_str()).await?)
+                self.ensure_allowed(unit, Command::Status)?;
+                Ok(self.systemd_status_manager.status(unit.as_str()).await?)
             }
             UserCommand::MultiStatus { units } => {
                 for unit in units {
-                    ensure_allowed(unit, Command::Status, config)?;
+                    self.ensure_allowed(unit, Command::Status)?;
                 }
 
-                let statuses =
-                    statuses(systemd_status_manager, units.iter().map(|u| u.as_str())).await;
+                let statuses = statuses(
+                    self.systemd_status_manager.as_ref(),
+                    units.iter().map(|u| u.as_str()),
+                )
+                .await;
                 let status_lines = statuses
                     .into_iter()
                     .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
