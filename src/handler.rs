@@ -1,6 +1,6 @@
 use crate::builder::build_commands;
 use crate::command::UserCommand;
-use crate::config::{CommandType, Config, Unit, UnitPermission};
+use crate::config::{Command, CommandType, Config};
 use crate::systemd_status::{statuses, SystemdStatusManager};
 use async_trait::async_trait;
 use futures::future::join_all;
@@ -33,35 +33,27 @@ pub struct HandlerImpl {
 }
 
 impl HandlerImpl {
-    fn units_that_allow_status_iter(&self) -> impl Iterator<Item = &Unit> {
-        self.config
-            .units
-            .values()
-            .filter(|unit| unit.permissions.contains(&UnitPermission::Status))
-    }
-
     async fn update_activity_stream(
         &self,
     ) -> Result<StreamMap<&str, PropertyStream<'_, String>>, zbus::Error> {
-        let streams = self.units_that_allow_status_iter().map(|unit| {
-            self.systemd_status_manager
-                .status_stream(unit.name.as_str())
-        });
+        let streams = self.config.units[&Command::Status]
+            .iter()
+            .map(|u| self.systemd_status_manager.status_stream(u));
         let streams = join_all(streams)
             .await
             .into_iter()
             .collect::<Result<Vec<PropertyStream<String>>, zbus::Error>>()?;
-        Ok(self
-            .units_that_allow_status_iter()
-            .map(|unit| unit.name.as_str())
+        Ok(self.config.units[&Command::Status]
+            .iter()
+            .map(|u| u.as_str())
             .zip(streams)
             .collect::<StreamMap<&str, PropertyStream<String>>>())
     }
 
     async fn update_activity(&self, ctx: &Context) {
-        let units = self
-            .units_that_allow_status_iter()
-            .map(|unit| unit.name.as_str());
+        let units = self.config.units[&Command::Status]
+            .iter()
+            .map(|u| u.as_str());
         let statuses = statuses(self.systemd_status_manager.as_ref(), units).await;
         let active_units = statuses
             .into_iter()
@@ -77,9 +69,9 @@ impl HandlerImpl {
         }
     }
 
-    fn get_unit_from_opt(&self, option: &CommandDataOption) -> Option<&Unit> {
+    fn get_unit_from_opt(&self, option: &CommandDataOption) -> Option<String> {
         match &option.resolved {
-            Some(CommandDataOptionValue::String(name)) => self.config.units.get(name),
+            Some(CommandDataOptionValue::String(name)) => Some(name.clone()),
             _ => None,
         }
     }
@@ -107,7 +99,7 @@ impl HandlerImpl {
                     unit: self.get_unit_from_opt(option)?,
                 },
                 None => UserCommand::MultiStatus {
-                    units: self.units_that_allow_status_iter().collect(),
+                    units: self.config.units[&Command::Status].clone(),
                 },
             }),
             _ => None,
@@ -141,11 +133,13 @@ impl Handler for HandlerImpl {
                         })
                         .await
                         .unwrap();
-                    let response_content =
-                        match command.run(self.systemd_status_manager.as_ref()).await {
-                            Ok(value) => value,
-                            Err(value) => value.to_string(),
-                        };
+                    let response_content = match command
+                        .run(self.systemd_status_manager.as_ref(), self.config.as_ref())
+                        .await
+                    {
+                        Ok(value) => value,
+                        Err(value) => value.to_string(),
+                    };
                     interaction
                         .create_followup_message(&ctx.http, |response| {
                             response.content(response_content)

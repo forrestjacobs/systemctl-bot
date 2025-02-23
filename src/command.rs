@@ -1,16 +1,16 @@
-use crate::config::{Unit, UnitPermission};
+use crate::config::{Command, Config};
 use crate::systemctl::{restart, start, stop, SystemctlError};
 use crate::systemd_status::{statuses, SystemdStatusManager};
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
-pub enum UserCommand<'a> {
-    Start { unit: &'a Unit },
-    Stop { unit: &'a Unit },
-    Restart { unit: &'a Unit },
-    SingleStatus { unit: &'a Unit },
-    MultiStatus { units: Vec<&'a Unit> },
+pub enum UserCommand {
+    Start { unit: String },
+    Stop { unit: String },
+    Restart { unit: String },
+    SingleStatus { unit: String },
+    MultiStatus { units: Vec<String> },
 }
 
 #[derive(Debug)]
@@ -46,50 +46,51 @@ impl From<zbus::Error> for UserCommandError {
     }
 }
 
-fn ensure_allowed(unit: &Unit, permission: UnitPermission) -> Result<(), UserCommandError> {
-    if unit.permissions.contains(&permission) {
+fn ensure_allowed<C: Config + ?Sized>(
+    unit: &String,
+    command: Command,
+    config: &C,
+) -> Result<(), UserCommandError> {
+    if config.get().units[&command].contains(unit) {
         Ok(())
     } else {
         Err(UserCommandError::NotAllowed)
     }
 }
 
-impl UserCommand<'_> {
-    pub async fn run<M: SystemdStatusManager + ?Sized>(
+impl UserCommand {
+    pub async fn run<M: SystemdStatusManager + ?Sized, C: Config + ?Sized>(
         &self,
         systemd_status_manager: &M,
+        config: &C,
     ) -> Result<String, UserCommandError> {
         match self {
             UserCommand::Start { unit } => {
-                ensure_allowed(unit, UnitPermission::Start)?;
-                start(&unit.name).await?;
-                Ok(format!("Started {}", unit.name))
+                ensure_allowed(unit, Command::Start, config)?;
+                start(unit).await?;
+                Ok(format!("Started {}", unit))
             }
             UserCommand::Stop { unit } => {
-                ensure_allowed(unit, UnitPermission::Stop)?;
-                stop(&unit.name).await?;
-                Ok(format!("Stopped {}", unit.name))
+                ensure_allowed(unit, Command::Stop, config)?;
+                stop(unit).await?;
+                Ok(format!("Stopped {}", unit))
             }
             UserCommand::Restart { unit } => {
-                ensure_allowed(unit, UnitPermission::Stop)?;
-                ensure_allowed(unit, UnitPermission::Start)?;
-                restart(&unit.name).await?;
-                Ok(format!("Restarted {}", unit.name))
+                ensure_allowed(unit, Command::Restart, config)?;
+                restart(unit).await?;
+                Ok(format!("Restarted {}", unit))
             }
             UserCommand::SingleStatus { unit } => {
-                ensure_allowed(unit, UnitPermission::Status)?;
-                Ok(systemd_status_manager.status(unit.name.as_str()).await?)
+                ensure_allowed(unit, Command::Status, config)?;
+                Ok(systemd_status_manager.status(unit.as_str()).await?)
             }
             UserCommand::MultiStatus { units } => {
                 for unit in units {
-                    ensure_allowed(unit, UnitPermission::Status)?;
+                    ensure_allowed(unit, Command::Status, config)?;
                 }
 
-                let statuses = statuses(
-                    systemd_status_manager,
-                    units.iter().map(|u| u.name.as_str()),
-                )
-                .await;
+                let statuses =
+                    statuses(systemd_status_manager, units.iter().map(|u| u.as_str())).await;
                 let status_lines = statuses
                     .into_iter()
                     .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))

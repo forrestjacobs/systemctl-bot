@@ -1,10 +1,10 @@
-use crate::config::{CommandType, Unit, UnitPermission};
-use indexmap::IndexMap;
+use crate::config::{Command, CommandType};
 use serenity::builder::{CreateApplicationCommandOption, CreateApplicationCommands};
 use serenity::model::application::command::CommandOptionType;
+use std::collections::HashMap;
 
 struct UnitOption<'a> {
-    units: Vec<&'a str>,
+    units: &'a Vec<String>,
     description: &'a str,
     required: bool,
 }
@@ -18,31 +18,18 @@ fn setup_unit_option<'a>(
         .kind(CommandOptionType::String)
         .description(unit_option.description)
         .required(unit_option.required);
-    for unit in &unit_option.units {
+    for unit in unit_option.units {
         let alias = unit.strip_suffix(".service").unwrap_or(unit);
         builder.add_string_choice(alias, unit);
     }
     builder
 }
 
-fn get_filtered_units<P: Fn(&Unit) -> bool>(
-    units: &IndexMap<String, Unit>,
-    predicate: P,
-) -> Vec<&str> {
-    units
-        .iter()
-        .filter(|(_, unit)| predicate(unit))
-        .map(|(name, _)| name.as_str())
-        .collect::<Vec<&str>>()
-}
-
-fn create_commands<F>(units: &IndexMap<String, Unit>, mut register: F)
+fn create_commands<F>(units: &HashMap<Command, Vec<String>>, mut register: F)
 where
     F: FnMut(&str, &str, UnitOption),
 {
-    let startable_units = get_filtered_units(units, |unit| {
-        unit.permissions.contains(&UnitPermission::Start)
-    });
+    let startable_units = &units[&Command::Start];
     if !startable_units.is_empty() {
         let option = UnitOption {
             units: startable_units,
@@ -52,9 +39,7 @@ where
         register("start", "Start units", option);
     }
 
-    let stoppable_units = get_filtered_units(units, |unit| {
-        unit.permissions.contains(&UnitPermission::Stop)
-    });
+    let stoppable_units = &units[&Command::Stop];
     if !stoppable_units.is_empty() {
         let option = UnitOption {
             units: stoppable_units,
@@ -64,10 +49,7 @@ where
         register("stop", "Stops units", option);
     }
 
-    let restartable_units = get_filtered_units(units, |unit| {
-        unit.permissions.contains(&UnitPermission::Stop)
-            && unit.permissions.contains(&UnitPermission::Start)
-    });
+    let restartable_units = &units[&Command::Restart];
     if !restartable_units.is_empty() {
         let option = UnitOption {
             units: restartable_units,
@@ -77,9 +59,7 @@ where
         register("restart", "Restarts units", option);
     }
 
-    let checkable_units = get_filtered_units(units, |unit| {
-        unit.permissions.contains(&UnitPermission::Status)
-    });
+    let checkable_units = &units[&Command::Status];
     if !checkable_units.is_empty() {
         let option = UnitOption {
             units: checkable_units,
@@ -91,7 +71,7 @@ where
 }
 
 pub fn build_commands<'a>(
-    units: &IndexMap<String, Unit>,
+    units: &HashMap<Command, Vec<String>>,
     command_type: &CommandType,
     builder: &'a mut CreateApplicationCommands,
 ) -> &'a mut CreateApplicationCommands {
