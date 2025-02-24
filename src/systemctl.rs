@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+use shaku::{Component, Interface};
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
@@ -44,30 +46,41 @@ impl From<Output> for SystemctlError {
     }
 }
 
-async fn systemctl_do<S: AsRef<OsStr>, T: AsRef<OsStr>>(
-    verb: S,
-    unit: T,
-) -> Result<(), SystemctlError> {
-    let output = Command::new("systemctl")
-        .arg(verb)
-        .arg(unit)
-        .output()
-        .await?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(SystemctlError::from(output))
+#[async_trait]
+pub trait Systemctl: Interface {
+    async fn start(&self, unit: &str) -> Result<(), SystemctlError>;
+    async fn stop(&self, unit: &str) -> Result<(), SystemctlError>;
+    async fn restart(&self, unit: &str) -> Result<(), SystemctlError>;
+}
+
+#[derive(Component)]
+#[shaku(interface = Systemctl)]
+pub struct SystemctlImpl;
+
+impl SystemctlImpl {
+    async fn run<S: AsRef<OsStr>, T: AsRef<OsStr>>(verb: S, unit: T) -> Result<(), SystemctlError> {
+        let output = Command::new("systemctl")
+            .arg(verb)
+            .arg(unit)
+            .output()
+            .await?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(SystemctlError::from(output))
+        }
     }
 }
 
-pub async fn start<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
-    systemctl_do("start", &unit).await
-}
-
-pub async fn stop<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
-    systemctl_do("stop", &unit).await
-}
-
-pub async fn restart<S: AsRef<OsStr>>(unit: S) -> Result<(), SystemctlError> {
-    systemctl_do("restart", &unit).await
+#[async_trait]
+impl Systemctl for SystemctlImpl {
+    async fn start(&self, unit: &str) -> Result<(), SystemctlError> {
+        Self::run("start", &unit).await
+    }
+    async fn stop(&self, unit: &str) -> Result<(), SystemctlError> {
+        Self::run("stop", &unit).await
+    }
+    async fn restart(&self, unit: &str) -> Result<(), SystemctlError> {
+        Self::run("restart", &unit).await
+    }
 }

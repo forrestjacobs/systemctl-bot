@@ -14,12 +14,13 @@ use serenity::all::{
 };
 use shaku::{module, HasComponent};
 use std::sync::Arc;
+use systemctl::SystemctlImpl;
 use systemd_status::SystemdStatusManagerImpl;
 use systemd_status::SystemdStatusManagerImplParameters;
 
 module! {
     RootModule {
-        components = [CommandRunnerImpl, ConfigImpl, SystemdStatusManagerImpl, HandlerImpl],
+        components = [CommandRunnerImpl, ConfigImpl, SystemctlImpl, SystemdStatusManagerImpl, HandlerImpl],
         providers = [],
     }
 }

@@ -1,5 +1,5 @@
 use crate::config::{Command, Config};
-use crate::systemctl::{restart, start, stop, SystemctlError};
+use crate::systemctl::{Systemctl, SystemctlError};
 use crate::systemd_status::SystemdStatusManager;
 use async_trait::async_trait;
 use shaku::{Component, Interface};
@@ -60,6 +60,8 @@ pub struct CommandRunnerImpl {
     #[shaku(inject)]
     config: Arc<dyn Config>,
     #[shaku(inject)]
+    systemctl: Arc<dyn Systemctl>,
+    #[shaku(inject)]
     systemd_status_manager: Arc<dyn SystemdStatusManager>,
 }
 
@@ -79,17 +81,17 @@ impl CommandRunner for CommandRunnerImpl {
         match command {
             UserCommand::Start { unit } => {
                 self.ensure_allowed(unit, Command::Start)?;
-                start(unit).await?;
+                self.systemctl.start(unit).await?;
                 Ok(format!("Started {}", unit))
             }
             UserCommand::Stop { unit } => {
                 self.ensure_allowed(unit, Command::Stop)?;
-                stop(unit).await?;
+                self.systemctl.stop(unit).await?;
                 Ok(format!("Stopped {}", unit))
             }
             UserCommand::Restart { unit } => {
                 self.ensure_allowed(unit, Command::Restart)?;
-                restart(unit).await?;
+                self.systemctl.restart(unit).await?;
                 Ok(format!("Restarted {}", unit))
             }
             UserCommand::SingleStatus { unit } => {
