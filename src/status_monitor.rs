@@ -3,7 +3,7 @@ use crate::config::{Command, Config};
 use async_trait::async_trait;
 use futures::future::join_all;
 use futures::StreamExt;
-use serenity::all::{ActivityData, Context};
+use poise::serenity_prelude::all::{ActivityData, Context};
 use shaku::{Component, Interface};
 use std::sync::Arc;
 use tokio_stream::StreamMap;
@@ -11,7 +11,7 @@ use zbus::PropertyStream;
 
 #[async_trait]
 pub trait StatusMonitor: Interface {
-    async fn monitor(&self, ctx: Context);
+    async fn monitor(&self, ctx: &Context);
 }
 
 #[derive(Component)]
@@ -63,11 +63,11 @@ impl StatusMonitorImpl {
 
 #[async_trait]
 impl StatusMonitor for StatusMonitorImpl {
-    async fn monitor(&self, ctx: Context) {
+    async fn monitor(&self, ctx: &Context) {
         let mut stream = self.update_activity_stream().await.unwrap();
-        self.update_activity(&ctx).await;
+        self.update_activity(ctx).await;
         while stream.next().await.is_some() {
-            self.update_activity(&ctx).await;
+            self.update_activity(ctx).await;
         }
     }
 }

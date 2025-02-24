@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 async-trait = "0.1.86"
 futures = "0.3"
+poise = "0.6.1"
 shaku = "0.6.2"
 tokio-stream = "0.1"
 
@@ -23,11 +24,6 @@ features = ["toml"]
 [dependencies.serde]
 version = "1.0"
 features = ["derive"]
-
-[dependencies.serenity]
-version = "0.12"
-default-features = false
-features = ["cache", "client", "gateway", "model", "rustls_backend", "unstable_discord_api"]
 
 [dependencies.tokio]
 version = "1.18"

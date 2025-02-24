@@ -1,8 +1,18 @@
-use crate::{config::Config, handler::Handler};
+use crate::{
+    command::{self, Data},
+    config::{CommandType, Config},
+    status_monitor::StatusMonitor,
+    systemctl::Systemctl,
+    systemd_status::SystemdStatusManager,
+};
 use async_trait::async_trait;
-use serenity::{
-    all::{ApplicationId, Context, EventHandler, GatewayIntents, Interaction, Ready},
-    Client, Error,
+use poise::{
+    samples::register_in_guild,
+    serenity_prelude::{
+        all::{ApplicationId, Client, Error, GatewayIntents},
+        GuildId,
+    },
+    Command, Framework, FrameworkOptions,
 };
 use shaku::{Component, Interface};
 use std::sync::Arc;
@@ -18,29 +28,56 @@ pub struct ClientBuilderImpl {
     #[shaku(inject)]
     config: Arc<dyn Config>,
     #[shaku(inject)]
-    handler: Arc<dyn Handler>,
-}
-
-struct HandlerWrapper(Arc<dyn Handler>);
-
-#[async_trait]
-impl EventHandler for HandlerWrapper {
-    async fn ready(&self, ctx: Context, _data_about_bot: Ready) {
-        self.0.ready(ctx).await;
-    }
-    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        self.0.interaction_create(ctx, interaction).await;
-    }
+    status_monitor: Arc<dyn StatusMonitor>,
+    #[shaku(inject)]
+    systemctl: Arc<dyn Systemctl>,
+    #[shaku(inject)]
+    systemd_status_manager: Arc<dyn SystemdStatusManager>,
 }
 
 #[async_trait]
 impl ClientBuilder for ClientBuilderImpl {
     async fn build(&self) -> Result<Client, Error> {
+        let guild_id = GuildId::new(self.config.guild_id);
+        let status_monitor = self.status_monitor.clone();
+        let data: Data = Data {
+            config: self.config.clone(),
+            systemctl: self.systemctl.clone(),
+            systemd_status_manager: self.systemd_status_manager.clone(),
+        };
+        let commands = vec![
+            command::start(),
+            command::stop(),
+            command::restart(),
+            command::status(),
+        ];
+        let commands = match self.config.command_type {
+            CommandType::Multiple => commands,
+            CommandType::Single => vec![Command {
+                name: "systemctl".into(),
+                subcommands: commands,
+                ..Default::default()
+            }],
+        };
+        let framework = Framework::builder()
+            .options(FrameworkOptions {
+                commands,
+                ..Default::default()
+            })
+            .setup(move |ctx, _ready, framework| {
+                Box::pin(async move {
+                    register_in_guild(&ctx.http, &framework.options().commands, guild_id).await?;
+                    status_monitor.monitor(ctx).await;
+                    Ok(data)
+                })
+            })
+            .build();
+
         Client::builder(
             &self.config.discord_token,
             GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
         )
-        .event_handler(HandlerWrapper(self.handler.to_owned()))
+        .framework(framework)
         .application_id(ApplicationId::new(self.config.application_id))
         .await
     }
