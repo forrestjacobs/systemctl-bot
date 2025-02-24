@@ -59,7 +59,9 @@ impl SystemdStatusManager for SystemdStatusManagerImpl {
     }
 }
 
-pub async fn get_client() -> Result<ManagerProxy<'static>, Error> {
+pub async fn make_params() -> Result<SystemdStatusManagerImplParameters, Error> {
     let conn = Connection::system().await?;
-    Ok(ManagerProxy::new(&conn).await?)
+    Ok(SystemdStatusManagerImplParameters {
+        client: ManagerProxy::new(&conn).await?,
+    })
 }

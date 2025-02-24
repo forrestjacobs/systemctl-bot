@@ -18,7 +18,6 @@ use status_monitor::StatusMonitorImpl;
 use std::sync::Arc;
 use systemctl::SystemctlImpl;
 use systemd_status::SystemdStatusManagerImpl;
-use systemd_status::SystemdStatusManagerImplParameters;
 
 module! {
     RootModule {
@@ -42,9 +41,9 @@ impl EventHandler for HandlerWrapper {
 #[tokio::main]
 async fn main() {
     let module = RootModule::builder()
-        .with_component_parameters::<SystemdStatusManagerImpl>(SystemdStatusManagerImplParameters {
-            client: systemd_status::get_client().await.unwrap(),
-        })
+        .with_component_parameters::<SystemdStatusManagerImpl>(
+            systemd_status::make_params().await.unwrap(),
+        )
         .build();
 
     let config: &dyn Config = module.resolve_ref();
