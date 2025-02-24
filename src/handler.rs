@@ -1,7 +1,7 @@
 use crate::builder::build_commands;
 use crate::command::{CommandRunner, UserCommand};
 use crate::config::{Command, CommandType, Config};
-use crate::systemd_status::{statuses, SystemdStatusManager};
+use crate::systemd_status::SystemdStatusManager;
 use async_trait::async_trait;
 use futures::future::join_all;
 use futures::StreamExt;
@@ -54,7 +54,7 @@ impl HandlerImpl {
         let units = self.config.units[&Command::Status]
             .iter()
             .map(|u| u.as_str());
-        let statuses = statuses(self.systemd_status_manager.as_ref(), units).await;
+        let statuses = self.systemd_status_manager.statuses(units).await;
         let active_units = statuses
             .into_iter()
             .filter(|(_, status)| status.as_ref().map_or(false, |status| status == "active"))

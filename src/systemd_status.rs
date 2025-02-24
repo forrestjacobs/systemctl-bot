@@ -9,14 +9,16 @@ pub trait SystemdStatusManager: Interface {
     async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>, Error>;
 }
 
-pub async fn statuses<'a, M: SystemdStatusManager + ?Sized, I: Iterator<Item = &'a str>>(
-    manager: &M,
-    units: I,
-) -> Vec<(&'a str, Result<String, Error>)> {
-    let units: Vec<&str> = units.collect();
-    let statuses = units.iter().map(|unit| manager.status(unit));
-    let statuses = join_all(statuses).await;
-    units.into_iter().zip(statuses).collect()
+impl dyn SystemdStatusManager {
+    pub async fn statuses<'a, I: Iterator<Item = &'a str>>(
+        &self,
+        units: I,
+    ) -> Vec<(&'a str, Result<String, Error>)> {
+        let units: Vec<&str> = units.collect();
+        let statuses = units.iter().map(|unit| self.status(unit));
+        let statuses = join_all(statuses).await;
+        units.into_iter().zip(statuses).collect()
+    }
 }
 
 #[dbus_proxy(

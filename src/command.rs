@@ -1,6 +1,6 @@
 use crate::config::{Command, Config};
 use crate::systemctl::{restart, start, stop, SystemctlError};
-use crate::systemd_status::{statuses, SystemdStatusManager};
+use crate::systemd_status::SystemdStatusManager;
 use async_trait::async_trait;
 use shaku::{Component, Interface};
 use std::error::Error;
@@ -101,11 +101,10 @@ impl CommandRunner for CommandRunnerImpl {
                     self.ensure_allowed(unit, Command::Status)?;
                 }
 
-                let statuses = statuses(
-                    self.systemd_status_manager.as_ref(),
-                    units.iter().map(|u| u.as_str()),
-                )
-                .await;
+                let statuses = self
+                    .systemd_status_manager
+                    .statuses(units.iter().map(|u| u.as_str()))
+                    .await;
                 let status_lines = statuses
                     .into_iter()
                     .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
