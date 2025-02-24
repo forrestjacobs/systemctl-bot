@@ -2,6 +2,7 @@ mod builder;
 mod command;
 mod config;
 mod handler;
+mod status_monitor;
 mod systemctl;
 mod systemd_status;
 
@@ -13,6 +14,7 @@ use serenity::all::{
     ApplicationId, Client, Context, EventHandler, GatewayIntents, Interaction, Ready,
 };
 use shaku::{module, HasComponent};
+use status_monitor::StatusMonitorImpl;
 use std::sync::Arc;
 use systemctl::SystemctlImpl;
 use systemd_status::SystemdStatusManagerImpl;
@@ -20,7 +22,7 @@ use systemd_status::SystemdStatusManagerImplParameters;
 
 module! {
     RootModule {
-        components = [CommandRunnerImpl, ConfigImpl, SystemctlImpl, SystemdStatusManagerImpl, HandlerImpl],
+        components = [CommandRunnerImpl, ConfigImpl, StatusMonitorImpl, SystemctlImpl, SystemdStatusManagerImpl, HandlerImpl],
         providers = [],
     }
 }

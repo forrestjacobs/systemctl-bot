@@ -1,19 +1,15 @@
 use crate::builder::build_commands;
 use crate::command::{CommandRunner, UserCommand};
 use crate::config::{Command, CommandType, Config};
-use crate::systemd_status::SystemdStatusManager;
+use crate::status_monitor::StatusMonitor;
 use async_trait::async_trait;
-use futures::future::join_all;
-use futures::StreamExt;
 use serenity::all::{
-    ActivityData, CommandDataOption, CommandDataOptionValue, CommandInteraction, Context,
+    CommandDataOption, CommandDataOptionValue, CommandInteraction, Context,
     CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage,
     GuildId, Interaction,
 };
 use shaku::{Component, Interface};
 use std::sync::Arc;
-use tokio_stream::StreamMap;
-use zbus::PropertyStream;
 
 #[async_trait]
 pub trait Handler: Interface {
@@ -27,48 +23,12 @@ pub struct HandlerImpl {
     #[shaku(inject)]
     config: Arc<dyn Config>,
     #[shaku(inject)]
-    systemd_status_manager: Arc<dyn SystemdStatusManager>,
-    #[shaku(inject)]
     command_runner: Arc<dyn CommandRunner>,
+    #[shaku(inject)]
+    status_monitor: Arc<dyn StatusMonitor>,
 }
 
 impl HandlerImpl {
-    async fn update_activity_stream(
-        &self,
-    ) -> Result<StreamMap<&str, PropertyStream<'_, String>>, zbus::Error> {
-        let streams = self.config.units[&Command::Status]
-            .iter()
-            .map(|u| self.systemd_status_manager.status_stream(u));
-        let streams = join_all(streams)
-            .await
-            .into_iter()
-            .collect::<Result<Vec<PropertyStream<String>>, zbus::Error>>()?;
-        Ok(self.config.units[&Command::Status]
-            .iter()
-            .map(|u| u.as_str())
-            .zip(streams)
-            .collect::<StreamMap<&str, PropertyStream<String>>>())
-    }
-
-    async fn update_activity(&self, ctx: &Context) {
-        let units = self.config.units[&Command::Status]
-            .iter()
-            .map(|u| u.as_str());
-        let statuses = self.systemd_status_manager.statuses(units).await;
-        let active_units = statuses
-            .into_iter()
-            .filter(|(_, status)| status.as_ref().map_or(false, |status| status == "active"))
-            .map(|(unit, _)| unit)
-            .collect::<Vec<&str>>();
-
-        if active_units.is_empty() {
-            ctx.reset_presence();
-        } else {
-            let activity = ActivityData::playing(active_units.join(", "));
-            ctx.set_activity(Some(activity));
-        }
-    }
-
     fn get_unit_from_opt(&self, option: &CommandDataOption) -> Option<String> {
         match &option.value {
             CommandDataOptionValue::String(name) => Some(name.clone()),
@@ -122,11 +82,7 @@ impl Handler for HandlerImpl {
             .await
             .unwrap();
 
-        let mut stream = self.update_activity_stream().await.unwrap();
-        self.update_activity(&ctx).await;
-        while stream.next().await.is_some() {
-            self.update_activity(&ctx).await;
-        }
+        self.status_monitor.monitor(ctx).await;
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
