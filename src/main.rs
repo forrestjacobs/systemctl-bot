@@ -2,6 +2,7 @@ mod builder;
 mod command;
 mod config;
 mod handler;
+mod parser;
 mod status_monitor;
 mod systemctl;
 mod systemd_status;
@@ -10,6 +11,7 @@ use async_trait::async_trait;
 use command::CommandRunnerImpl;
 use config::{Config, ConfigImpl};
 use handler::{Handler, HandlerImpl};
+use parser::ParserImpl;
 use serenity::all::{
     ApplicationId, Client, Context, EventHandler, GatewayIntents, Interaction, Ready,
 };
@@ -21,7 +23,7 @@ use systemd_status::SystemdStatusManagerImpl;
 
 module! {
     RootModule {
-        components = [CommandRunnerImpl, ConfigImpl, StatusMonitorImpl, SystemctlImpl, SystemdStatusManagerImpl, HandlerImpl],
+        components = [CommandRunnerImpl, ConfigImpl, ParserImpl, StatusMonitorImpl, SystemctlImpl, SystemdStatusManagerImpl, HandlerImpl],
         providers = [],
     }
 }
