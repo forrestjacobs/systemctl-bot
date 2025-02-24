@@ -2,6 +2,7 @@ use crate::config::{Command, Config};
 use crate::systemctl::{Systemctl, SystemctlError};
 use crate::systemd_status::SystemdStatusManager;
 use poise::command;
+use poise::serenity_prelude::AutocompleteChoice;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -59,17 +60,60 @@ impl Data {
 type CommandError = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, CommandError>;
 
-// TODO: Restrict units when typing
+fn autocomplete_units<'a>(
+    command: &Command,
+    ctx: Context<'a>,
+    partial: &'a str,
+) -> impl Iterator<Item = AutocompleteChoice> + 'a {
+    ctx.data().config.units[command]
+        .iter()
+        .filter(move |unit| unit.starts_with(partial))
+        .map(|unit| {
+            let alias = unit.strip_suffix(".service").unwrap_or(unit);
+            AutocompleteChoice::new(alias, unit.as_str())
+        })
+}
+
+async fn autocomplete_startable_units<'a>(
+    ctx: Context<'a>,
+    partial: &'a str,
+) -> impl Iterator<Item = AutocompleteChoice> + 'a {
+    autocomplete_units(&Command::Start, ctx, partial)
+}
+
+async fn autocomplete_stoppable_units<'a>(
+    ctx: Context<'a>,
+    partial: &'a str,
+) -> impl Iterator<Item = AutocompleteChoice> + 'a {
+    autocomplete_units(&Command::Stop, ctx, partial)
+}
+
+async fn autocomplete_restartable_units<'a>(
+    ctx: Context<'a>,
+    partial: &'a str,
+) -> impl Iterator<Item = AutocompleteChoice> + 'a {
+    autocomplete_units(&Command::Restart, ctx, partial)
+}
+
+async fn autocomplete_status_units<'a>(
+    ctx: Context<'a>,
+    partial: &'a str,
+) -> impl Iterator<Item = AutocompleteChoice> + 'a {
+    autocomplete_units(&Command::Status, ctx, partial)
+}
 
 /// Starts units
 #[command(slash_command)]
 pub async fn start(
     ctx: Context<'_>,
-    #[description = "The unit to start"] unit: String,
+    #[description = "The unit to start"]
+    #[autocomplete = "autocomplete_startable_units"]
+    unit: String,
 ) -> Result<(), CommandError> {
     ctx.defer().await?;
-    ctx.data().ensure_allowed(&unit, Command::Start)?;
-    ctx.data().systemctl.start(&unit).await?;
+    let data = ctx.data();
+    data.ensure_allowed(&unit, Command::Start)?;
+    data.systemctl.start(&unit).await?;
     ctx.say(format!("Started {}", unit)).await?;
     Ok(())
 }
@@ -78,7 +122,9 @@ pub async fn start(
 #[command(slash_command)]
 pub async fn stop(
     ctx: Context<'_>,
-    #[description = "The unit to stop"] unit: String,
+    #[description = "The unit to stop"]
+    #[autocomplete = "autocomplete_stoppable_units"]
+    unit: String,
 ) -> Result<(), CommandError> {
     ctx.defer().await?;
     let data = ctx.data();
@@ -92,7 +138,9 @@ pub async fn stop(
 #[command(slash_command)]
 pub async fn restart(
     ctx: Context<'_>,
-    #[description = "The unit to restart"] unit: String,
+    #[description = "The unit to restart"]
+    #[autocomplete = "autocomplete_restartable_units"]
+    unit: String,
 ) -> Result<(), CommandError> {
     ctx.defer().await?;
     let data = ctx.data();
@@ -106,7 +154,9 @@ pub async fn restart(
 #[command(slash_command)]
 pub async fn status(
     ctx: Context<'_>,
-    #[description = "The unit to check"] unit: Option<String>,
+    #[description = "The unit to check"]
+    #[autocomplete = "autocomplete_status_units"]
+    unit: Option<String>,
 ) -> Result<(), CommandError> {
     ctx.defer().await?;
     let data = ctx.data();
@@ -116,20 +166,19 @@ pub async fn status(
         ctx.say(response).await?;
     } else {
         let units = &data.config.units[&Command::Status];
-        let statuses = data
+        let lines = data
             .systemd_status_manager
             .statuses(units.iter().map(|u| u.as_str()))
-            .await;
-        let status_lines = statuses
+            .await
             .into_iter()
             .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
             .filter(|(_, status)| status != "inactive")
             .map(|(unit, status)| format!("{}: {}", unit, status))
             .collect::<Vec<String>>();
-        let response = if status_lines.is_empty() {
+        let response = if lines.is_empty() {
             String::from("Nothing is active")
         } else {
-            status_lines.join("\n")
+            lines.join("\n")
         };
         ctx.say(response).await?;
     }
