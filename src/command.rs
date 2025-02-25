@@ -160,27 +160,27 @@ pub async fn status(
 ) -> Result<(), CommandError> {
     ctx.defer().await?;
     let data = ctx.data();
-    if let Some(unit) = unit {
-        data.ensure_allowed(&unit, Command::Status)?;
-        let response = data.systemd_status_manager.status(&unit).await?;
-        ctx.say(response).await?;
-    } else {
-        let units = &data.config.units[&Command::Status];
-        let lines = data
-            .systemd_status_manager
-            .statuses(units.iter().map(|u| u.as_str()))
-            .await
-            .into_iter()
-            .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
-            .filter(|(_, status)| status != "inactive")
-            .map(|(unit, status)| format!("{}: {}", unit, status))
-            .collect::<Vec<String>>();
-        let response = if lines.is_empty() {
-            String::from("Nothing is active")
-        } else {
-            lines.join("\n")
-        };
-        ctx.say(response).await?;
-    }
+    let response = match unit {
+        Some(unit) => {
+            data.ensure_allowed(&unit, Command::Status)?;
+            data.systemd_status_manager.status(&unit).await?
+        }
+        None => {
+            let lines = data
+                .systemd_status_manager
+                .statuses(&data.config.units[&Command::Status])
+                .await
+                .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
+                .filter(|(_, status)| status != "inactive")
+                .map(|(unit, status)| format!("{}: {}", unit, status))
+                .collect::<Vec<String>>();
+            if lines.is_empty() {
+                String::from("Nothing is active")
+            } else {
+                lines.join("\n")
+            }
+        }
+    };
+    ctx.say(response).await?;
     Ok(())
 }

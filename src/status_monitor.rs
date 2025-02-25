@@ -42,14 +42,12 @@ impl StatusMonitorImpl {
     }
 
     async fn update_activity(&self, ctx: &Context) {
-        let units = self.config.units[&Command::Status]
-            .iter()
-            .map(|u| u.as_str());
-        let statuses = self.systemd_status_manager.statuses(units).await;
-        let active_units = statuses
-            .into_iter()
-            .filter(|(_, status)| status.as_ref().map_or(false, |status| status == "active"))
-            .map(|(unit, _)| unit)
+        let active_units = self
+            .systemd_status_manager
+            .statuses(&self.config.units[&Command::Status])
+            .await
+            .filter(|(_, status)| status == &Ok(String::from("active")))
+            .map(|(unit, _)| unit.as_str())
             .collect::<Vec<&str>>();
 
         if active_units.is_empty() {

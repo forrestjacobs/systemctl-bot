@@ -10,14 +10,13 @@ pub trait SystemdStatusManager: Interface {
 }
 
 impl dyn SystemdStatusManager {
-    pub async fn statuses<'a, I: Iterator<Item = &'a str>>(
+    pub async fn statuses<'a>(
         &self,
-        units: I,
-    ) -> Vec<(&'a str, Result<String, Error>)> {
-        let units: Vec<&str> = units.collect();
+        units: &'a Vec<String>,
+    ) -> impl Iterator<Item = (&'a String, Result<String, Error>)> {
         let statuses = units.iter().map(|unit| self.status(unit));
         let statuses = join_all(statuses).await;
-        units.into_iter().zip(statuses).collect()
+        units.into_iter().zip(statuses)
     }
 }
 
