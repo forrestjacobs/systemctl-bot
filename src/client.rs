@@ -2,8 +2,6 @@ use crate::{
     command::{self, Data},
     config::{CommandType, Config},
     status_monitor::StatusMonitor,
-    systemctl::Systemctl,
-    systemd_status::SystemdStatusManager,
 };
 use async_trait::async_trait;
 use poise::{
@@ -27,9 +25,7 @@ pub struct ClientBuilderImpl {
     #[shaku(inject)]
     status_monitor: Arc<dyn StatusMonitor>,
     #[shaku(inject)]
-    systemctl: Arc<dyn Systemctl>,
-    #[shaku(inject)]
-    systemd_status_manager: Arc<dyn SystemdStatusManager>,
+    data: Arc<dyn Data>,
 }
 
 #[async_trait]
@@ -37,11 +33,7 @@ impl ClientBuilder for ClientBuilderImpl {
     async fn build(&self) -> Result<Client, Error> {
         let guild_id = self.config.guild_id;
         let status_monitor = self.status_monitor.clone();
-        let data: Data = Data {
-            config: self.config.clone(),
-            systemctl: self.systemctl.clone(),
-            systemd_status_manager: self.systemd_status_manager.clone(),
-        };
+        let data = self.data.clone();
         let commands = vec![
             command::start(),
             command::stop(),

@@ -6,6 +6,7 @@ mod systemctl;
 mod systemd_status;
 
 use client::{ClientBuilder, ClientBuilderImpl};
+use command::DataImpl;
 use config::ConfigImpl;
 use shaku::{module, HasComponent};
 use status_monitor::StatusMonitorImpl;
@@ -14,7 +15,7 @@ use systemd_status::SystemdStatusManagerImpl;
 
 module! {
     RootModule {
-        components = [ClientBuilderImpl, ConfigImpl, StatusMonitorImpl, SystemctlImpl, SystemdStatusManagerImpl],
+        components = [ClientBuilderImpl, ConfigImpl, DataImpl, StatusMonitorImpl, SystemctlImpl, SystemdStatusManagerImpl],
         providers = [],
     }
 }
