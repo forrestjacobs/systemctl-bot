@@ -8,10 +8,7 @@ use crate::{
 use async_trait::async_trait;
 use poise::{
     samples::register_in_guild,
-    serenity_prelude::{
-        all::{ApplicationId, Client, Error, GatewayIntents},
-        GuildId,
-    },
+    serenity_prelude::all::{Client, Error, GatewayIntents},
     Command, Framework, FrameworkOptions,
 };
 use shaku::{Component, Interface};
@@ -38,7 +35,7 @@ pub struct ClientBuilderImpl {
 #[async_trait]
 impl ClientBuilder for ClientBuilderImpl {
     async fn build(&self) -> Result<Client, Error> {
-        let guild_id = GuildId::new(self.config.guild_id);
+        let guild_id = self.config.guild_id;
         let status_monitor = self.status_monitor.clone();
         let data: Data = Data {
             config: self.config.clone(),
@@ -78,7 +75,7 @@ impl ClientBuilder for ClientBuilderImpl {
             GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
         )
         .framework(framework)
-        .application_id(ApplicationId::new(self.config.application_id))
+        .application_id(self.config.application_id)
         .await
     }
 }

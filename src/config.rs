@@ -1,4 +1,5 @@
 use clap::Parser;
+use poise::serenity_prelude::{ApplicationId, GuildId};
 use serde::{self, Deserialize, Deserializer};
 use shaku::{Component, Interface, Module, ModuleBuildContext};
 use std::error::Error;
@@ -70,9 +71,9 @@ struct Unit {
 
 #[derive(Deserialize)]
 pub struct SystemctlBotConfig {
-    pub application_id: u64,
+    pub application_id: ApplicationId,
     pub discord_token: String,
-    pub guild_id: u64,
+    pub guild_id: GuildId,
     #[serde(default)]
     pub command_type: CommandType,
     #[serde(deserialize_with = "deserialize_units")]
