@@ -47,7 +47,7 @@ impl StatusMonitorImpl {
             .statuses(&self.config.units[&Command::Status])
             .await
             .filter(|(_, status)| status == &Ok(String::from("active")))
-            .map(|(unit, _)| unit.as_str())
+            .map(|(unit, _)| unit)
             .collect::<Vec<&str>>();
 
         if active_units.is_empty() {

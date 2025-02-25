@@ -13,10 +13,10 @@ impl dyn SystemdStatusManager {
     pub async fn statuses<'a>(
         &self,
         units: &'a Vec<String>,
-    ) -> impl Iterator<Item = (&'a String, Result<String, Error>)> {
+    ) -> impl Iterator<Item = (&'a str, Result<String, Error>)> {
         let statuses = units.iter().map(|unit| self.status(unit));
         let statuses = join_all(statuses).await;
-        units.into_iter().zip(statuses)
+        units.into_iter().map(|unit| unit.as_str()).zip(statuses)
     }
 }
 
