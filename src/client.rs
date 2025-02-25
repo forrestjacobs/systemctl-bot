@@ -56,7 +56,10 @@ impl ClientBuilder for ClientBuilderImpl {
             .setup(move |ctx, _ready, framework| {
                 Box::pin(async move {
                     register_in_guild(&ctx.http, &framework.options().commands, guild_id).await?;
-                    status_monitor.monitor(ctx).await;
+                    let ctx = ctx.clone();
+                    tokio::spawn(async move {
+                        status_monitor.monitor(&ctx).await;
+                    });
                     Ok(data)
                 })
             })
