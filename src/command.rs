@@ -6,6 +6,7 @@ use poise::serenity_prelude::AutocompleteChoice;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::iter::empty;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -60,46 +61,18 @@ impl Data {
 type CommandError = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, CommandError>;
 
-fn autocomplete_units<'a>(
-    command: &Command,
-    ctx: Context<'a>,
-    partial: &'a str,
-) -> impl Iterator<Item = AutocompleteChoice> + 'a {
-    ctx.data().config.units[command]
+async fn autocomplete_units<'a>(ctx: Context<'a>, partial: &'a str) -> Vec<AutocompleteChoice> {
+    let Ok(command) = Command::try_from(ctx.command().name.as_str()) else {
+        return empty().collect();
+    };
+    ctx.data().config.units[&command]
         .iter()
         .filter(move |unit| unit.starts_with(partial))
         .map(|unit| {
             let alias = unit.strip_suffix(".service").unwrap_or(unit);
             AutocompleteChoice::new(alias, unit.as_str())
         })
-}
-
-async fn autocomplete_startable_units<'a>(
-    ctx: Context<'a>,
-    partial: &'a str,
-) -> impl Iterator<Item = AutocompleteChoice> + 'a {
-    autocomplete_units(&Command::Start, ctx, partial)
-}
-
-async fn autocomplete_stoppable_units<'a>(
-    ctx: Context<'a>,
-    partial: &'a str,
-) -> impl Iterator<Item = AutocompleteChoice> + 'a {
-    autocomplete_units(&Command::Stop, ctx, partial)
-}
-
-async fn autocomplete_restartable_units<'a>(
-    ctx: Context<'a>,
-    partial: &'a str,
-) -> impl Iterator<Item = AutocompleteChoice> + 'a {
-    autocomplete_units(&Command::Restart, ctx, partial)
-}
-
-async fn autocomplete_status_units<'a>(
-    ctx: Context<'a>,
-    partial: &'a str,
-) -> impl Iterator<Item = AutocompleteChoice> + 'a {
-    autocomplete_units(&Command::Status, ctx, partial)
+        .collect()
 }
 
 /// Starts units
@@ -107,7 +80,7 @@ async fn autocomplete_status_units<'a>(
 pub async fn start(
     ctx: Context<'_>,
     #[description = "The unit to start"]
-    #[autocomplete = "autocomplete_startable_units"]
+    #[autocomplete = "autocomplete_units"]
     unit: String,
 ) -> Result<(), CommandError> {
     ctx.defer().await?;
@@ -123,7 +96,7 @@ pub async fn start(
 pub async fn stop(
     ctx: Context<'_>,
     #[description = "The unit to stop"]
-    #[autocomplete = "autocomplete_stoppable_units"]
+    #[autocomplete = "autocomplete_units"]
     unit: String,
 ) -> Result<(), CommandError> {
     ctx.defer().await?;
@@ -139,7 +112,7 @@ pub async fn stop(
 pub async fn restart(
     ctx: Context<'_>,
     #[description = "The unit to restart"]
-    #[autocomplete = "autocomplete_restartable_units"]
+    #[autocomplete = "autocomplete_units"]
     unit: String,
 ) -> Result<(), CommandError> {
     ctx.defer().await?;
@@ -155,7 +128,7 @@ pub async fn restart(
 pub async fn status(
     ctx: Context<'_>,
     #[description = "The unit to check"]
-    #[autocomplete = "autocomplete_status_units"]
+    #[autocomplete = "autocomplete_units"]
     unit: Option<String>,
 ) -> Result<(), CommandError> {
     ctx.defer().await?;

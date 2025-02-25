@@ -1,6 +1,8 @@
 use clap::Parser;
 use serde::{self, Deserialize, Deserializer};
 use shaku::{Component, Interface, Module, ModuleBuildContext};
+use std::error::Error;
+use std::fmt::{self, Display, Formatter};
 use std::{
     collections::{HashMap, HashSet},
     ops::Deref,
@@ -12,6 +14,30 @@ pub enum Command {
     Stop,
     Status,
     Restart,
+}
+
+#[derive(Debug)]
+pub struct CommandParseError;
+
+impl Display for CommandParseError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "Could not parse command")
+    }
+}
+
+impl Error for CommandParseError {}
+
+impl TryFrom<&str> for Command {
+    type Error = CommandParseError;
+    fn try_from(value: &str) -> Result<Self, CommandParseError> {
+        match value {
+            "start" => Ok(Command::Start),
+            "stop" => Ok(Command::Stop),
+            "status" => Ok(Command::Status),
+            "restart" => Ok(Command::Restart),
+            _ => Err(CommandParseError),
+        }
+    }
 }
 
 #[derive(Deserialize, Hash, PartialEq, Eq)]
