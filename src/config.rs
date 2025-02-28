@@ -9,7 +9,7 @@ use std::{
     ops::Deref,
 };
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Debug, Hash, PartialEq, Eq)]
 pub enum Command {
     Start,
     Stop,
@@ -17,7 +17,7 @@ pub enum Command {
     Restart,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct CommandParseError;
 
 impl Display for CommandParseError {
@@ -41,7 +41,7 @@ impl TryFrom<&str> for Command {
     }
 }
 
-#[derive(Deserialize, Hash, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum UnitPermission {
     Start,
@@ -49,7 +49,7 @@ enum UnitPermission {
     Status,
 }
 
-#[derive(Deserialize, Hash, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CommandType {
     Single,
@@ -62,14 +62,14 @@ impl Default for CommandType {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct Unit {
     #[serde(deserialize_with = "deserialize_unit_name")]
     name: String,
     permissions: HashSet<UnitPermission>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct SystemctlBotConfig {
     pub application_id: ApplicationId,
     pub discord_token: String,
@@ -98,7 +98,7 @@ fn get_units_with_perms<const N: usize>(
     let perms = HashSet::from(perms);
     units
         .iter()
-        .filter(|u| u.permissions.is_subset(&perms))
+        .filter(|u| perms.is_subset(&u.permissions))
         .map(|u| u.name.clone())
         .collect()
 }
@@ -108,6 +108,7 @@ where
     D: Deserializer<'de>,
 {
     let units: Vec<Unit> = Vec::deserialize(deserializer)?;
+    println!("{:?}", &units);
     let units = HashMap::from([
         (
             Command::Start,
@@ -168,5 +169,72 @@ impl<M: Module> Component<M> for ConfigImpl {
             .try_deserialize()
             .unwrap();
         Box::new(ConfigImpl(config))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn command_from_string() {
+        assert_eq!(Command::try_from("start"), Ok(Command::Start));
+        assert_eq!(Command::try_from("stop"), Ok(Command::Stop));
+        assert_eq!(Command::try_from("status"), Ok(Command::Status));
+        assert_eq!(Command::try_from("restart"), Ok(Command::Restart));
+        assert_eq!(Command::try_from("random"), Err(CommandParseError));
+    }
+
+    #[test]
+    fn parse_config() {
+        let config: SystemctlBotConfig = config::Config::builder()
+            .add_source(config::File::from_str(
+                r#"
+                    application_id = 88888888
+                    guild_id = 4444
+                    discord_token = "88888888.88888888.88888888"
+                    command_type = "multiple"
+
+                    [[units]]
+                    name = "all"
+                    permissions = ["start", "stop", "status"]
+
+                    [[units]]
+                    name = "status"
+                    permissions = ["status"]
+
+                    [[units]]
+                    name = "start"
+                    permissions = ["start"]
+                "#,
+                config::FileFormat::Toml,
+            ))
+            .build()
+            .unwrap()
+            .try_deserialize()
+            .unwrap();
+
+        let all = String::from("all.service");
+        assert_eq!(
+            config,
+            SystemctlBotConfig {
+                application_id: ApplicationId::new(88888888),
+                discord_token: String::from("88888888.88888888.88888888"),
+                guild_id: GuildId::new(4444),
+                command_type: CommandType::Multiple,
+                units: HashMap::from([
+                    (
+                        Command::Start,
+                        vec![all.clone(), String::from("start.service")],
+                    ),
+                    (Command::Stop, vec![all.clone()],),
+                    (Command::Restart, vec![all.clone()],),
+                    (
+                        Command::Status,
+                        vec![all.clone(), String::from("status.service")],
+                    ),
+                ]),
+            }
+        );
     }
 }
