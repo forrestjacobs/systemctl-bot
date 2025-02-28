@@ -1,5 +1,5 @@
 use crate::config::{Command, UnitCollection};
-use crate::systemctl::{Systemctl, SystemctlError};
+use crate::process::{ProcessError, ProcessRunner};
 use crate::systemd_status::SystemdStatusManager;
 use poise::command;
 use poise::serenity_prelude::AutocompleteChoice;
@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum CommandRunnerError {
-    SystemctlError(SystemctlError),
+    ProcessError(ProcessError),
     ZbusError(zbus::Error),
     NotAllowed,
 }
@@ -19,7 +19,7 @@ pub enum CommandRunnerError {
 impl Display for CommandRunnerError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            CommandRunnerError::SystemctlError(e) => write!(f, "{}", e),
+            CommandRunnerError::ProcessError(e) => write!(f, "{}", e),
             CommandRunnerError::ZbusError(e) => write!(f, "{}", e),
             CommandRunnerError::NotAllowed => {
                 write!(f, "Command is not allowed")
@@ -30,9 +30,9 @@ impl Display for CommandRunnerError {
 
 impl Error for CommandRunnerError {}
 
-impl From<SystemctlError> for CommandRunnerError {
-    fn from(error: SystemctlError) -> Self {
-        CommandRunnerError::SystemctlError(error)
+impl From<ProcessError> for CommandRunnerError {
+    fn from(error: ProcessError) -> Self {
+        CommandRunnerError::ProcessError(error)
     }
 }
 
@@ -44,7 +44,7 @@ impl From<zbus::Error> for CommandRunnerError {
 
 pub struct Data {
     pub units: Arc<UnitCollection>,
-    pub systemctl: Arc<dyn Systemctl>,
+    pub runner: Arc<dyn ProcessRunner>,
     pub systemd_status_manager: Arc<dyn SystemdStatusManager>,
 }
 
@@ -75,6 +75,10 @@ async fn autocomplete_units<'a>(ctx: Context<'a>, partial: &'a str) -> Vec<Autoc
         .collect()
 }
 
+fn systemctl() -> tokio::process::Command {
+    tokio::process::Command::new("systemctl")
+}
+
 /// Starts units
 #[command(slash_command)]
 pub async fn start(
@@ -86,7 +90,7 @@ pub async fn start(
     ctx.defer().await?;
     let data = ctx.data();
     data.ensure_allowed(&unit, Command::Start)?;
-    data.systemctl.start(&unit).await?;
+    data.runner.run(systemctl().arg("start").arg(&unit)).await?;
     ctx.say(format!("Started {}", unit)).await?;
     Ok(())
 }
@@ -102,7 +106,7 @@ pub async fn stop(
     ctx.defer().await?;
     let data = ctx.data();
     data.ensure_allowed(&unit, Command::Stop)?;
-    data.systemctl.stop(&unit).await?;
+    data.runner.run(systemctl().arg("stop").arg(&unit)).await?;
     ctx.say(format!("Stopped {}", unit)).await?;
     Ok(())
 }
@@ -118,7 +122,9 @@ pub async fn restart(
     ctx.defer().await?;
     let data = ctx.data();
     data.ensure_allowed(&unit, Command::Restart)?;
-    data.systemctl.restart(&unit).await?;
+    data.runner
+        .run(systemctl().arg("restart").arg(&unit))
+        .await?;
     ctx.say(format!("Stopped {}", unit)).await?;
     Ok(())
 }

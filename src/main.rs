@@ -1,17 +1,17 @@
 mod client;
 mod command;
 mod config;
+mod process;
 mod status_monitor;
-mod systemctl;
 mod systemd_status;
 
 use client::build_framework;
 use command::Data;
 use config::Config;
 use poise::serenity_prelude::{Client, GatewayIntents};
+use process::ProcessRunnerImpl;
 use status_monitor::StatusMonitorImpl;
 use std::{error::Error, sync::Arc};
-use systemctl::SystemctlImpl;
 use systemd_status::SystemdStatusManagerImpl;
 use tokio::spawn;
 
@@ -32,7 +32,7 @@ async fn start() -> Result<(), Box<dyn Error>> {
         }),
         Arc::from(Data {
             units: units.clone(),
-            systemctl: Arc::from(SystemctlImpl {}),
+            runner: Arc::from(ProcessRunnerImpl {}),
             systemd_status_manager: systemd_status_manager.clone(),
         }),
     );
