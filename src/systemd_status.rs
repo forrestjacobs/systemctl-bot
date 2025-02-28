@@ -64,3 +64,43 @@ impl SystemdStatusManager for SystemdStatusManagerImpl {
         Ok(unit.receive_active_state_changed().await)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MockSystemdStatusManager {}
+
+    #[async_trait]
+    impl SystemdStatusManager for MockSystemdStatusManager {
+        async fn status(&self, unit: &str) -> Result<String, Error> {
+            if unit == "invalid.service" {
+                Err(Error::InvalidReply)
+            } else {
+                Ok(unit.strip_suffix(".service").unwrap_or(unit).into())
+            }
+        }
+        async fn status_stream(&self, _unit: &str) -> Result<PropertyStream<'_, String>, Error> {
+            todo!()
+        }
+    }
+
+    #[tokio::test]
+    async fn get_statuses() {
+        let mock: Box<dyn SystemdStatusManager> = Box::from(MockSystemdStatusManager {});
+        let units = vec![
+            String::from("active.service"),
+            String::from("inactive.service"),
+            String::from("invalid.service"),
+        ];
+        let statuses: Vec<(&str, Result<String, Error>)> = mock.statuses(&units).await.collect();
+        assert_eq!(
+            statuses,
+            vec![
+                ("active.service", Ok(String::from("active"))),
+                ("inactive.service", Ok(String::from("inactive"))),
+                ("invalid.service", Err(Error::InvalidReply)),
+            ]
+        );
+    }
+}
