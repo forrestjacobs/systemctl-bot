@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use shaku::{Component, Interface};
+use std::any::Any;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
@@ -47,14 +47,12 @@ impl From<Output> for SystemctlError {
 }
 
 #[async_trait]
-pub trait Systemctl: Interface {
+pub trait Systemctl: Any + Sync + Send {
     async fn start(&self, unit: &str) -> Result<(), SystemctlError>;
     async fn stop(&self, unit: &str) -> Result<(), SystemctlError>;
     async fn restart(&self, unit: &str) -> Result<(), SystemctlError>;
 }
 
-#[derive(Component)]
-#[shaku(interface = Systemctl)]
 pub struct SystemctlImpl;
 
 impl SystemctlImpl {

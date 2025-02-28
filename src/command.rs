@@ -1,9 +1,8 @@
-use crate::config::{Command, Config};
+use crate::config::{Command, UnitCollection};
 use crate::systemctl::{Systemctl, SystemctlError};
 use crate::systemd_status::SystemdStatusManager;
 use poise::command;
 use poise::serenity_prelude::AutocompleteChoice;
-use shaku::{Component, Interface};
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -43,33 +42,15 @@ impl From<zbus::Error> for CommandRunnerError {
     }
 }
 
-pub trait Data: Interface {
-    fn config(&self) -> &dyn Config;
-    fn systemctl(&self) -> &dyn Systemctl;
-    fn systemd_status_manager(&self) -> &dyn SystemdStatusManager;
-    fn ensure_allowed(&self, unit: &String, command: Command) -> Result<(), CommandRunnerError>;
-}
-
-#[derive(Component)]
-#[shaku(interface = Data)]
-pub struct DataImpl {
-    pub config: Arc<dyn Config>,
+pub struct Data {
+    pub units: Arc<UnitCollection>,
     pub systemctl: Arc<dyn Systemctl>,
     pub systemd_status_manager: Arc<dyn SystemdStatusManager>,
 }
 
-impl Data for DataImpl {
-    fn config(&self) -> &dyn Config {
-        self.config.as_ref()
-    }
-    fn systemctl(&self) -> &dyn Systemctl {
-        self.systemctl.as_ref()
-    }
-    fn systemd_status_manager(&self) -> &dyn SystemdStatusManager {
-        self.systemd_status_manager.as_ref()
-    }
+impl Data {
     fn ensure_allowed(&self, unit: &String, command: Command) -> Result<(), CommandRunnerError> {
-        if self.config.units[&command].contains(unit) {
+        if self.units[&command].contains(unit) {
             Ok(())
         } else {
             Err(CommandRunnerError::NotAllowed)
@@ -78,13 +59,13 @@ impl Data for DataImpl {
 }
 
 type CommandError = Box<dyn std::error::Error + Send + Sync>;
-type Context<'a> = poise::Context<'a, Arc<dyn Data>, CommandError>;
+type Context<'a> = poise::Context<'a, Arc<Data>, CommandError>;
 
 async fn autocomplete_units<'a>(ctx: Context<'a>, partial: &'a str) -> Vec<AutocompleteChoice> {
     let Ok(command) = Command::try_from(ctx.command().name.as_str()) else {
         return empty().collect();
     };
-    ctx.data().config().units[&command]
+    ctx.data().units[&command]
         .iter()
         .filter(move |unit| unit.starts_with(partial))
         .map(|unit| {
@@ -105,7 +86,7 @@ pub async fn start(
     ctx.defer().await?;
     let data = ctx.data();
     data.ensure_allowed(&unit, Command::Start)?;
-    data.systemctl().start(&unit).await?;
+    data.systemctl.start(&unit).await?;
     ctx.say(format!("Started {}", unit)).await?;
     Ok(())
 }
@@ -121,7 +102,7 @@ pub async fn stop(
     ctx.defer().await?;
     let data = ctx.data();
     data.ensure_allowed(&unit, Command::Stop)?;
-    data.systemctl().stop(&unit).await?;
+    data.systemctl.stop(&unit).await?;
     ctx.say(format!("Stopped {}", unit)).await?;
     Ok(())
 }
@@ -137,7 +118,7 @@ pub async fn restart(
     ctx.defer().await?;
     let data = ctx.data();
     data.ensure_allowed(&unit, Command::Restart)?;
-    data.systemctl().restart(&unit).await?;
+    data.systemctl.restart(&unit).await?;
     ctx.say(format!("Stopped {}", unit)).await?;
     Ok(())
 }
@@ -155,12 +136,12 @@ pub async fn status(
     let response = match unit {
         Some(unit) => {
             data.ensure_allowed(&unit, Command::Status)?;
-            data.systemd_status_manager().status(&unit).await?
+            data.systemd_status_manager.status(&unit).await?
         }
         None => {
             let lines = data
-                .systemd_status_manager()
-                .statuses(&data.config().units[&Command::Status])
+                .systemd_status_manager
+                .statuses(&data.units[&Command::Status])
                 .await
                 .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
                 .filter(|(_, status)| status != "inactive")

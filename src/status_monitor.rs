@@ -1,40 +1,35 @@
 use super::systemd_status::SystemdStatusManager;
-use crate::config::{Command, Config};
+use crate::config::{Command, UnitCollection};
 use async_trait::async_trait;
 use futures::future::join_all;
 use futures::StreamExt;
 use poise::serenity_prelude::all::{ActivityData, Context};
-use shaku::{Component, Interface};
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 use tokio_stream::StreamMap;
 use zbus::PropertyStream;
 
 #[async_trait]
-pub trait StatusMonitor: Interface {
+pub trait StatusMonitor: Any + Send + Sync {
     async fn monitor(&self, ctx: &Context);
 }
 
-#[derive(Component)]
-#[shaku(interface = StatusMonitor)]
 pub struct StatusMonitorImpl {
-    #[shaku(inject)]
-    config: Arc<dyn Config>,
-    #[shaku(inject)]
-    systemd_status_manager: Arc<dyn SystemdStatusManager>,
+    pub units: Arc<UnitCollection>,
+    pub systemd_status_manager: Arc<dyn SystemdStatusManager>,
 }
 
 impl StatusMonitorImpl {
     async fn update_activity_stream(
         &self,
     ) -> Result<StreamMap<&str, PropertyStream<'_, String>>, zbus::Error> {
-        let streams = self.config.units[&Command::Status]
+        let streams = self.units[&Command::Status]
             .iter()
             .map(|u| self.systemd_status_manager.status_stream(u));
         let streams = join_all(streams)
             .await
             .into_iter()
             .collect::<Result<Vec<PropertyStream<String>>, zbus::Error>>()?;
-        Ok(self.config.units[&Command::Status]
+        Ok(self.units[&Command::Status]
             .iter()
             .map(|u| u.as_str())
             .zip(streams)
@@ -44,7 +39,7 @@ impl StatusMonitorImpl {
     async fn update_activity(&self, ctx: &Context) {
         let active_units = self
             .systemd_status_manager
-            .statuses(&self.config.units[&Command::Status])
+            .statuses(&self.units[&Command::Status])
             .await
             .filter(|(_, status)| status == &Ok(String::from("active")))
             .map(|(unit, _)| unit)

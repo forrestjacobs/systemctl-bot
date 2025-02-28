@@ -9,7 +9,6 @@ publish = false
 async-trait = "0.1.86"
 futures = "0.3"
 poise = "0.6.1"
-shaku = "0.6.2"
 tokio-stream = "0.1"
 
 [dependencies.clap]

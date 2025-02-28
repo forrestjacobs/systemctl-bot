@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use futures::future::join_all;
-use shaku::{Component, Interface};
+use std::any::Any;
 use zbus::{dbus_proxy, Connection, Error, PropertyStream};
 
 #[async_trait]
-pub trait SystemdStatusManager: Interface {
+pub trait SystemdStatusManager: Any + Sync + Send {
     async fn status(&self, unit: &str) -> Result<String, Error>;
     async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>, Error>;
 }
@@ -39,10 +39,17 @@ trait Unit {
     fn active_state(&self) -> zbus::Result<String>;
 }
 
-#[derive(Component)]
-#[shaku(interface = SystemdStatusManager)]
 pub struct SystemdStatusManagerImpl {
     client: ManagerProxy<'static>,
+}
+
+impl SystemdStatusManagerImpl {
+    pub async fn build() -> Result<Self, Error> {
+        let conn = Connection::system().await?;
+        Ok(SystemdStatusManagerImpl {
+            client: ManagerProxy::new(&conn).await?,
+        })
+    }
 }
 
 #[async_trait]
@@ -56,11 +63,4 @@ impl SystemdStatusManager for SystemdStatusManagerImpl {
         let unit = self.client.load_unit(unit).await?;
         Ok(unit.receive_active_state_changed().await)
     }
-}
-
-pub async fn make_params() -> Result<SystemdStatusManagerImplParameters, Error> {
-    let conn = Connection::system().await?;
-    Ok(SystemdStatusManagerImplParameters {
-        client: ManagerProxy::new(&conn).await?,
-    })
 }

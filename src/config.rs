@@ -1,13 +1,10 @@
 use clap::Parser;
+use config::ConfigError;
 use poise::serenity_prelude::{ApplicationId, GuildId};
 use serde::{self, Deserialize, Deserializer};
-use shaku::{Component, Interface, Module, ModuleBuildContext};
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Deref,
-};
 
 #[derive(Debug, Hash, PartialEq, Eq)]
 pub enum Command {
@@ -69,15 +66,17 @@ struct Unit {
     permissions: HashSet<UnitPermission>,
 }
 
+pub type UnitCollection = HashMap<Command, Vec<String>>;
+
 #[derive(Debug, Deserialize, PartialEq)]
-pub struct SystemctlBotConfig {
+pub struct Config {
     pub application_id: ApplicationId,
     pub discord_token: String,
     pub guild_id: GuildId,
     #[serde(default)]
     pub command_type: CommandType,
     #[serde(deserialize_with = "deserialize_units")]
-    pub units: HashMap<Command, Vec<String>>,
+    pub units: UnitCollection,
 }
 
 fn deserialize_unit_name<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -103,7 +102,7 @@ fn get_units_with_perms<const N: usize>(
         .collect()
 }
 
-fn deserialize_units<'de, D>(deserializer: D) -> Result<HashMap<Command, Vec<String>>, D::Error>
+fn deserialize_units<'de, D>(deserializer: D) -> Result<UnitCollection, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -130,24 +129,6 @@ where
     Ok(units)
 }
 
-pub trait Config: Interface {
-    fn get(&self) -> &SystemctlBotConfig;
-}
-
-impl Deref for dyn Config {
-    type Target = SystemctlBotConfig;
-    fn deref(&self) -> &SystemctlBotConfig {
-        self.get()
-    }
-}
-
-pub struct ConfigImpl(SystemctlBotConfig);
-impl Config for ConfigImpl {
-    fn get(&self) -> &SystemctlBotConfig {
-        &self.0
-    }
-}
-
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
 struct Args {
@@ -155,20 +136,15 @@ struct Args {
     config: String,
 }
 
-impl<M: Module> Component<M> for ConfigImpl {
-    type Interface = dyn Config;
-    type Parameters = ();
-
-    fn build(_context: &mut ModuleBuildContext<M>, _params: ()) -> Box<dyn Config> {
+impl Config {
+    pub fn build() -> Result<Self, ConfigError> {
         let args = Args::parse();
         let config = config::Config::builder()
             .add_source(config::File::with_name(&args.config))
             .add_source(config::Environment::with_prefix("SBOT"))
-            .build()
-            .unwrap()
-            .try_deserialize()
-            .unwrap();
-        Box::new(ConfigImpl(config))
+            .build()?
+            .try_deserialize()?;
+        Ok(config)
     }
 }
 
@@ -187,7 +163,7 @@ mod tests {
 
     #[test]
     fn parse_config() {
-        let config: SystemctlBotConfig = config::Config::builder()
+        let config: Config = config::Config::builder()
             .add_source(config::File::from_str(
                 r#"
                     application_id = 88888888
@@ -217,7 +193,7 @@ mod tests {
         let all = String::from("all.service");
         assert_eq!(
             config,
-            SystemctlBotConfig {
+            Config {
                 application_id: ApplicationId::new(88888888),
                 discord_token: String::from("88888888.88888888.88888888"),
                 guild_id: GuildId::new(4444),
