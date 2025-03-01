@@ -121,3 +121,33 @@ pub fn get_commands(
         }],
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn to_names(commands: &Vec<poise::structs::Command<Arc<Data>, BoxedError>>) -> Vec<&str> {
+        commands
+            .into_iter()
+            .map(|command| command.name.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn get_multiple_commands() {
+        assert_eq!(
+            to_names(&get_commands(CommandType::Multiple)),
+            vec!["start", "stop", "restart", "status"]
+        );
+    }
+
+    #[test]
+    fn get_single_commands() {
+        let commands = get_commands(CommandType::Single);
+        assert_eq!(to_names(&commands), vec!["systemctl"]);
+        assert_eq!(
+            to_names(&commands[0].subcommands),
+            vec!["start", "stop", "restart", "status"]
+        );
+    }
+}
