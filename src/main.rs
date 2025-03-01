@@ -1,12 +1,11 @@
 mod client;
-mod command;
+mod commands;
 mod config;
 mod process;
 mod status_monitor;
 mod systemd_status;
 
-use client::build_framework;
-use command::Data;
+use client::{build_framework, Data};
 use config::Config;
 use poise::serenity_prelude::{Client, GatewayIntents};
 use process::ProcessRunnerImpl;

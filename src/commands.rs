@@ -1,65 +1,9 @@
-use crate::config::{Command, UnitCollection};
-use crate::process::{ProcessError, ProcessRunner};
-use crate::systemd_status::SystemdStatusManager;
+use crate::client::{BoxedError, Context, Data};
+use crate::config::{Command, CommandType};
 use poise::command;
 use poise::serenity_prelude::AutocompleteChoice;
-use std::error::Error;
-use std::fmt;
-use std::fmt::{Display, Formatter};
 use std::iter::empty;
 use std::sync::Arc;
-
-#[derive(Debug)]
-pub enum CommandRunnerError {
-    ProcessError(ProcessError),
-    ZbusError(zbus::Error),
-    NotAllowed,
-}
-
-impl Display for CommandRunnerError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            CommandRunnerError::ProcessError(e) => write!(f, "{}", e),
-            CommandRunnerError::ZbusError(e) => write!(f, "{}", e),
-            CommandRunnerError::NotAllowed => {
-                write!(f, "Command is not allowed")
-            }
-        }
-    }
-}
-
-impl Error for CommandRunnerError {}
-
-impl From<ProcessError> for CommandRunnerError {
-    fn from(error: ProcessError) -> Self {
-        CommandRunnerError::ProcessError(error)
-    }
-}
-
-impl From<zbus::Error> for CommandRunnerError {
-    fn from(error: zbus::Error) -> Self {
-        CommandRunnerError::ZbusError(error)
-    }
-}
-
-pub struct Data {
-    pub units: Arc<UnitCollection>,
-    pub runner: Arc<dyn ProcessRunner>,
-    pub systemd_status_manager: Arc<dyn SystemdStatusManager>,
-}
-
-impl Data {
-    fn ensure_allowed(&self, unit: &String, command: Command) -> Result<(), CommandRunnerError> {
-        if self.units[&command].contains(unit) {
-            Ok(())
-        } else {
-            Err(CommandRunnerError::NotAllowed)
-        }
-    }
-}
-
-type CommandError = Box<dyn std::error::Error + Send + Sync>;
-type Context<'a> = poise::Context<'a, Arc<Data>, CommandError>;
 
 async fn autocomplete_units<'a>(ctx: Context<'a>, partial: &'a str) -> Vec<AutocompleteChoice> {
     let Ok(command) = Command::try_from(ctx.command().name.as_str()) else {
@@ -86,7 +30,7 @@ pub async fn start(
     #[description = "The unit to start"]
     #[autocomplete = "autocomplete_units"]
     unit: String,
-) -> Result<(), CommandError> {
+) -> Result<(), BoxedError> {
     ctx.defer().await?;
     let data = ctx.data();
     data.ensure_allowed(&unit, Command::Start)?;
@@ -102,7 +46,7 @@ pub async fn stop(
     #[description = "The unit to stop"]
     #[autocomplete = "autocomplete_units"]
     unit: String,
-) -> Result<(), CommandError> {
+) -> Result<(), BoxedError> {
     ctx.defer().await?;
     let data = ctx.data();
     data.ensure_allowed(&unit, Command::Stop)?;
@@ -118,7 +62,7 @@ pub async fn restart(
     #[description = "The unit to restart"]
     #[autocomplete = "autocomplete_units"]
     unit: String,
-) -> Result<(), CommandError> {
+) -> Result<(), BoxedError> {
     ctx.defer().await?;
     let data = ctx.data();
     data.ensure_allowed(&unit, Command::Restart)?;
@@ -136,7 +80,7 @@ pub async fn status(
     #[description = "The unit to check"]
     #[autocomplete = "autocomplete_units"]
     unit: Option<String>,
-) -> Result<(), CommandError> {
+) -> Result<(), BoxedError> {
     ctx.defer().await?;
     let data = ctx.data();
     let response = match unit {
@@ -162,4 +106,18 @@ pub async fn status(
     };
     ctx.say(response).await?;
     Ok(())
+}
+
+pub fn get_commands(
+    command_type: CommandType,
+) -> Vec<poise::structs::Command<Arc<Data>, BoxedError>> {
+    let commands = vec![start(), stop(), restart(), status()];
+    match command_type {
+        CommandType::Multiple => commands,
+        CommandType::Single => vec![poise::Command {
+            name: "systemctl".into(),
+            subcommands: commands,
+            ..Default::default()
+        }],
+    }
 }
