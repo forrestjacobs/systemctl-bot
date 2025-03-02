@@ -72,7 +72,7 @@ async fn restart_inner(ctx: impl CommandContext, unit: String) -> Result<()> {
     ctx.defer_response().await?;
     ctx.get_units().ensure_allowed(&unit, Command::Restart)?;
     ctx.get_systemctl().run(&["restart", &unit]).await?;
-    ctx.respond(format!("Stopped {}", unit)).await?;
+    ctx.respond(format!("Restarted {}", unit)).await?;
     Ok(())
 }
 
@@ -147,6 +147,47 @@ mod tests {
     use mockall::predicate;
     use std::collections::HashMap;
 
+    fn mock_units(ctx: &mut MockCommandContext, command: Command, units: &[&str]) {
+        ctx.expect_get_units()
+            .return_const(Arc::from(UnitCollection::from(HashMap::from([(
+                command,
+                units.into_iter().map(|unit| unit.to_string()).collect(),
+            )]))));
+    }
+
+    fn disallow_systemctl_run(ctx: &mut MockCommandContext) {
+        ctx.expect_get_systemctl().return_once(|| {
+            let mut systemctl = MockSystemctl::new();
+            systemctl.expect_run().never();
+            Arc::from(systemctl)
+        });
+    }
+
+    fn mock_systemctl_run(ctx: &mut MockCommandContext, args: &[&str], is_ok: bool) {
+        let args: Vec<String> = args.into_iter().map(|arg| arg.to_string()).collect();
+        ctx.expect_get_systemctl().return_once(move || {
+            let mut systemctl = MockSystemctl::new();
+            systemctl
+                .expect_run()
+                .with(predicate::eq(args))
+                .returning(move |_| if is_ok { Ok(()) } else { bail!("Run error") });
+            Arc::from(systemctl)
+        });
+    }
+
+    fn mock_respond(ctx: &mut MockCommandContext, response: &str, is_ok: bool) {
+        let response = response.to_string();
+        ctx.expect_respond()
+            .with(predicate::eq(response))
+            .returning(move |_| {
+                if is_ok {
+                    Ok(())
+                } else {
+                    bail!("Response error")
+                }
+            });
+    }
+
     fn to_names(commands: &Vec<poise::structs::Command<Arc<Data>, anyhow::Error>>) -> Vec<&str> {
         commands
             .into_iter()
@@ -177,40 +218,210 @@ mod tests {
     async fn start_fails_on_defer() {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response()
-            .returning(|| bail!("Test error"));
+            .returning(|| bail!("Defer error"));
+        disallow_systemctl_run(&mut ctx);
         assert_eq!(
             start_inner(ctx, "startable.service".to_string())
                 .await
                 .map_err(|e| e.to_string()),
-            Err("Test error".to_string())
+            Err("Defer error".to_string())
         );
     }
 
     #[tokio::test]
-    async fn test_start() {
+    async fn start_missing_permission() {
+        let mut ctx: MockCommandContext = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Start, &[]);
+        disallow_systemctl_run(&mut ctx);
+        assert_eq!(
+            start_inner(ctx, "startable.service".to_string())
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Command is not allowed".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn start_fails_on_run() {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
-        ctx.expect_get_units()
-            .return_const(Arc::from(UnitCollection::from(HashMap::from([(
-                Command::Start,
-                vec!["startable.service".to_string()],
-            )]))));
-        ctx.expect_get_systemctl().returning(|| {
-            let mut systemctl = MockSystemctl::new();
-            systemctl
-                .expect_run()
-                .with(predicate::eq([
-                    "start".to_string(),
-                    "startable.service".to_string(),
-                ]))
-                .returning(|_| Ok(()));
-            Arc::from(systemctl)
-        });
-        ctx.expect_respond()
-            .with(predicate::eq("Started startable.service".to_string()))
-            .returning(|_| Ok(()));
+        mock_units(&mut ctx, Command::Start, &["startable.service"]);
+        mock_systemctl_run(&mut ctx, &["start", "startable.service"], false);
+        assert_eq!(
+            start_inner(ctx, "startable.service".to_string())
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Run error".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn start_fails_on_reply() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Start, &["startable.service"]);
+        mock_systemctl_run(&mut ctx, &["start", "startable.service"], true);
+        mock_respond(&mut ctx, "Started startable.service", false);
+        assert_eq!(
+            start_inner(ctx, "startable.service".to_string())
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Response error".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn start() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Start, &["startable.service"]);
+        mock_systemctl_run(&mut ctx, &["start", "startable.service"], true);
+        mock_respond(&mut ctx, "Started startable.service", true);
         assert_eq!(
             start_inner(ctx, "startable.service".to_string()).await.ok(),
+            Some(())
+        );
+    }
+
+    #[tokio::test]
+    async fn stop_fails_on_defer() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response()
+            .returning(|| bail!("Defer error"));
+        disallow_systemctl_run(&mut ctx);
+        assert_eq!(
+            stop_inner(ctx, "stoppable.service".to_string())
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Defer error".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn stop_missing_permission() {
+        let mut ctx: MockCommandContext = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Stop, &[]);
+        disallow_systemctl_run(&mut ctx);
+        assert_eq!(
+            stop_inner(ctx, "stoppable.service".to_string())
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Command is not allowed".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn stop_fails_on_run() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Stop, &["stoppable.service"]);
+        mock_systemctl_run(&mut ctx, &["stop", "stoppable.service"], false);
+        assert_eq!(
+            stop_inner(ctx, "stoppable.service".to_string())
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Run error".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn stop_fails_on_reply() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Stop, &["stoppable.service"]);
+        mock_systemctl_run(&mut ctx, &["stop", "stoppable.service"], true);
+        mock_respond(&mut ctx, "Stopped stoppable.service", false);
+        assert_eq!(
+            stop_inner(ctx, "stoppable.service".to_string())
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Response error".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn stop() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Stop, &["stoppable.service"]);
+        mock_systemctl_run(&mut ctx, &["stop", "stoppable.service"], true);
+        mock_respond(&mut ctx, "Stopped stoppable.service", true);
+        assert_eq!(
+            stop_inner(ctx, "stoppable.service".to_string()).await.ok(),
+            Some(())
+        );
+    }
+
+    #[tokio::test]
+    async fn restart_fails_on_defer() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response()
+            .returning(|| bail!("Defer error"));
+        disallow_systemctl_run(&mut ctx);
+        assert_eq!(
+            restart_inner(ctx, "restartable.service".to_string())
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Defer error".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn restart_missing_permission() {
+        let mut ctx: MockCommandContext = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Restart, &[]);
+        disallow_systemctl_run(&mut ctx);
+        assert_eq!(
+            restart_inner(ctx, "restartable.service".to_string())
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Command is not allowed".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn restart_fails_on_run() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Restart, &["restartable.service"]);
+        mock_systemctl_run(&mut ctx, &["restart", "restartable.service"], false);
+        assert_eq!(
+            restart_inner(ctx, "restartable.service".to_string())
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Run error".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn restart_fails_on_reply() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Restart, &["restartable.service"]);
+        mock_systemctl_run(&mut ctx, &["restart", "restartable.service"], true);
+        mock_respond(&mut ctx, "Restarted restartable.service", false);
+        assert_eq!(
+            restart_inner(ctx, "restartable.service".to_string())
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Response error".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn restart() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Restart, &["restartable.service"]);
+        mock_systemctl_run(&mut ctx, &["restart", "restartable.service"], true);
+        mock_respond(&mut ctx, "Restarted restartable.service", true);
+        assert_eq!(
+            restart_inner(ctx, "restartable.service".to_string())
+                .await
+                .ok(),
             Some(())
         );
     }

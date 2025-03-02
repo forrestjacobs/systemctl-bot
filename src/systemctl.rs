@@ -11,15 +11,15 @@ pub trait Systemctl: Any + Sync + Send {
 
 mock! {
     pub Systemctl {
-        pub async fn run(&self, args: &[String]) -> Result<()>;
+        pub async fn run(&self, args: Vec<String>) -> Result<()>;
     }
 }
 
 #[async_trait]
 impl Systemctl for MockSystemctl {
     async fn run(&self, args: &[&str]) -> Result<()> {
-        let args: Vec<String> = args.into_iter().map(|s| s.to_string()).collect();
-        self.run(args.as_slice()).await
+        self.run(args.into_iter().map(|s| s.to_string()).collect())
+            .await
     }
 }
 
