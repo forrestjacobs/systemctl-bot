@@ -1,19 +1,37 @@
 use async_trait::async_trait;
 use futures::future::join_all;
+use mockall::mock;
 use std::any::Any;
-use zbus::{dbus_proxy, Connection, Error, PropertyStream};
+use zbus::{dbus_proxy, Connection, PropertyStream, Result};
 
 #[async_trait]
 pub trait SystemdStatusManager: Any + Sync + Send {
-    async fn status(&self, unit: &str) -> Result<String, Error>;
-    async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>, Error>;
+    async fn status(&self, unit: &str) -> Result<String>;
+    async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>>;
+}
+
+mock! {
+    pub SystemdStatusManager {
+        async fn status(&self, unit: &str) -> Result<String>;
+        async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'static, String>>;
+    }
+}
+
+#[async_trait]
+impl SystemdStatusManager for MockSystemdStatusManager {
+    async fn status(&self, unit: &str) -> Result<String> {
+        self.status(unit).await
+    }
+    async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>> {
+        self.status_stream(unit).await
+    }
 }
 
 impl dyn SystemdStatusManager {
     pub async fn statuses<'a>(
         &self,
         units: &'a Vec<String>,
-    ) -> impl Iterator<Item = (&'a str, Result<String, Error>)> {
+    ) -> impl Iterator<Item = (&'a str, Result<String>)> {
         let statuses = units.iter().map(|unit| self.status(unit));
         let statuses = join_all(statuses).await;
         units.into_iter().map(|unit| unit.as_str()).zip(statuses)
@@ -36,7 +54,7 @@ trait Manager {
 )]
 trait Unit {
     #[dbus_proxy(property)]
-    fn active_state(&self) -> zbus::Result<String>;
+    fn active_state(&self) -> Result<String>;
 }
 
 pub struct SystemdStatusManagerImpl {
@@ -44,7 +62,7 @@ pub struct SystemdStatusManagerImpl {
 }
 
 impl SystemdStatusManagerImpl {
-    pub async fn build() -> Result<Self, Error> {
+    pub async fn build() -> Result<Self> {
         let conn = Connection::system().await?;
         Ok(SystemdStatusManagerImpl {
             client: ManagerProxy::new(&conn).await?,
@@ -54,12 +72,12 @@ impl SystemdStatusManagerImpl {
 
 #[async_trait]
 impl SystemdStatusManager for SystemdStatusManagerImpl {
-    async fn status(&self, unit: &str) -> Result<String, Error> {
+    async fn status(&self, unit: &str) -> Result<String> {
         let unit = self.client.load_unit(unit).await?;
         unit.active_state().await
     }
 
-    async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>, Error> {
+    async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>> {
         let unit = self.client.load_unit(unit).await?;
         Ok(unit.receive_active_state_changed().await)
     }
@@ -68,19 +86,20 @@ impl SystemdStatusManager for SystemdStatusManagerImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use zbus::Error;
 
     struct MockSystemdStatusManager {}
 
     #[async_trait]
     impl SystemdStatusManager for MockSystemdStatusManager {
-        async fn status(&self, unit: &str) -> Result<String, Error> {
+        async fn status(&self, unit: &str) -> Result<String> {
             if unit == "invalid.service" {
                 Err(Error::InvalidReply)
             } else {
                 Ok(unit.strip_suffix(".service").unwrap_or(unit).into())
             }
         }
-        async fn status_stream(&self, _unit: &str) -> Result<PropertyStream<'_, String>, Error> {
+        async fn status_stream(&self, _unit: &str) -> Result<PropertyStream<'_, String>> {
             todo!()
         }
     }
@@ -93,7 +112,7 @@ mod tests {
             String::from("inactive.service"),
             String::from("invalid.service"),
         ];
-        let statuses: Vec<(&str, Result<String, Error>)> = mock.statuses(&units).await.collect();
+        let statuses: Vec<(&str, Result<String>)> = mock.statuses(&units).await.collect();
         assert_eq!(
             statuses,
             vec![

@@ -6,7 +6,7 @@ use futures::StreamExt;
 use poise::serenity_prelude::all::{ActivityData, Context};
 use std::{any::Any, sync::Arc};
 use tokio_stream::StreamMap;
-use zbus::PropertyStream;
+use zbus::{PropertyStream, Result};
 
 #[async_trait]
 pub trait StatusMonitor: Any + Send + Sync {
@@ -19,16 +19,14 @@ pub struct StatusMonitorImpl {
 }
 
 impl StatusMonitorImpl {
-    async fn update_activity_stream(
-        &self,
-    ) -> Result<StreamMap<&str, PropertyStream<'_, String>>, zbus::Error> {
+    async fn update_activity_stream(&self) -> Result<StreamMap<&str, PropertyStream<'_, String>>> {
         let streams = self.units[&Command::Status]
             .iter()
             .map(|u| self.systemd_status_manager.status_stream(u));
         let streams = join_all(streams)
             .await
             .into_iter()
-            .collect::<Result<Vec<PropertyStream<String>>, zbus::Error>>()?;
+            .collect::<Result<Vec<PropertyStream<String>>>>()?;
         Ok(self.units[&Command::Status]
             .iter()
             .map(|u| u.as_str())

@@ -6,8 +6,10 @@ edition = "2021"
 publish = false
 
 [dependencies]
+anyhow = "1.0.96"
 async-trait = "0.1.86"
 futures = "0.3"
+mockall = "0.13.1"
 poise = "0.6.1"
 tokio-stream = "0.1"
 

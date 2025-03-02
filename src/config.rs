@@ -1,10 +1,9 @@
+use anyhow::{anyhow, Result};
 use clap::Parser;
 use config::ConfigError;
 use poise::serenity_prelude::{ApplicationId, GuildId};
 use serde::{self, Deserialize, Deserializer};
 use std::collections::{HashMap, HashSet};
-use std::error::Error;
-use std::fmt::{self, Display, Formatter};
 use std::ops::Deref;
 
 #[derive(Debug, Hash, PartialEq, Eq)]
@@ -15,26 +14,15 @@ pub enum Command {
     Restart,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct CommandParseError;
-
-impl Display for CommandParseError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Could not parse command")
-    }
-}
-
-impl Error for CommandParseError {}
-
 impl TryFrom<&str> for Command {
-    type Error = CommandParseError;
-    fn try_from(value: &str) -> Result<Self, CommandParseError> {
+    type Error = anyhow::Error;
+    fn try_from(value: &str) -> Result<Self> {
         match value {
             "start" => Ok(Command::Start),
             "stop" => Ok(Command::Stop),
             "status" => Ok(Command::Status),
             "restart" => Ok(Command::Restart),
-            _ => Err(CommandParseError),
+            _ => Err(anyhow!("Could not parse command {}", value)),
         }
     }
 }
@@ -68,17 +56,6 @@ struct Unit {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct NotAllowedError {}
-
-impl Display for NotAllowedError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Command is not allowed")
-    }
-}
-
-impl Error for NotAllowedError {}
-
-#[derive(Debug, PartialEq)]
 pub struct UnitCollection(HashMap<Command, Vec<String>>);
 
 impl From<HashMap<Command, Vec<String>>> for UnitCollection {
@@ -88,15 +65,11 @@ impl From<HashMap<Command, Vec<String>>> for UnitCollection {
 }
 
 impl UnitCollection {
-    pub fn ensure_allowed(
-        &self,
-        unit: &str,
-        command: crate::config::Command,
-    ) -> Result<(), NotAllowedError> {
+    pub fn ensure_allowed(&self, unit: &str, command: crate::config::Command) -> Result<()> {
         if self.0[&command].iter().any(|u| u == unit) {
             Ok(())
         } else {
-            Err(NotAllowedError {})
+            Err(anyhow!("Command is not allowed"))
         }
     }
 }
@@ -195,11 +168,14 @@ mod tests {
 
     #[test]
     fn command_from_string() {
-        assert_eq!(Command::try_from("start"), Ok(Command::Start));
-        assert_eq!(Command::try_from("stop"), Ok(Command::Stop));
-        assert_eq!(Command::try_from("status"), Ok(Command::Status));
-        assert_eq!(Command::try_from("restart"), Ok(Command::Restart));
-        assert_eq!(Command::try_from("random"), Err(CommandParseError));
+        assert_eq!(Command::try_from("start").ok(), Some(Command::Start));
+        assert_eq!(Command::try_from("stop").ok(), Some(Command::Stop));
+        assert_eq!(Command::try_from("status").ok(), Some(Command::Status));
+        assert_eq!(Command::try_from("restart").ok(), Some(Command::Restart));
+        assert_eq!(
+            Command::try_from("random").map_err(|e| e.to_string()),
+            Err("Could not parse command random".to_string())
+        );
     }
 
     #[test]
@@ -209,12 +185,16 @@ mod tests {
             vec![String::from("start.service")],
         )]));
         assert_eq!(
-            collection.ensure_allowed("start.service", Command::Start),
-            Ok(())
+            collection
+                .ensure_allowed("start.service", Command::Start)
+                .ok(),
+            Some(())
         );
         assert_eq!(
-            collection.ensure_allowed("random.service", Command::Start),
-            Err(NotAllowedError {})
+            collection
+                .ensure_allowed("random.service", Command::Start)
+                .map_err(|e| e.to_string()),
+            Err("Command is not allowed".to_string())
         );
     }
 

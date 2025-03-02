@@ -1,20 +1,21 @@
 mod client;
 mod commands;
 mod config;
-mod process;
 mod status_monitor;
+mod systemctl;
 mod systemd_status;
 
+use anyhow::Result;
 use client::{build_framework, Data};
 use config::Config;
 use poise::serenity_prelude::{Client, GatewayIntents};
-use process::ProcessRunnerImpl;
 use status_monitor::StatusMonitorImpl;
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
+use systemctl::SystemctlImpl;
 use systemd_status::SystemdStatusManagerImpl;
 use tokio::spawn;
 
-async fn start() -> Result<(), Box<dyn Error>> {
+async fn start() -> Result<()> {
     let systemd_status_manager_handle = spawn(SystemdStatusManagerImpl::build());
 
     let config = Config::build()?;
@@ -31,7 +32,7 @@ async fn start() -> Result<(), Box<dyn Error>> {
         }),
         Arc::from(Data {
             units: units.clone(),
-            runner: Arc::from(ProcessRunnerImpl {}),
+            systemctl: Arc::from(SystemctlImpl {}),
             systemd_status_manager: systemd_status_manager.clone(),
         }),
     );
@@ -44,8 +45,9 @@ async fn start() -> Result<(), Box<dyn Error>> {
     .application_id(config.application_id)
     .await?
     .start()
-    .await
-    .map_err(Box::from)
+    .await?;
+
+    Ok(())
 }
 
 #[tokio::main]

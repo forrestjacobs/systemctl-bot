@@ -1,5 +1,6 @@
-use crate::client::{BoxedError, Context, Data};
+use crate::client::{CommandContext, Context, Data};
 use crate::config::{Command, CommandType, UnitCollection};
+use anyhow::Result;
 use poise::command;
 use poise::serenity_prelude::AutocompleteChoice;
 use std::sync::Arc;
@@ -29,8 +30,13 @@ async fn autocomplete_units<'a>(ctx: Context<'a>, partial: &'a str) -> Vec<Autoc
         .collect()
 }
 
-fn systemctl() -> tokio::process::Command {
-    tokio::process::Command::new("systemctl")
+async fn start_inner(ctx: impl CommandContext, unit: String) -> Result<()> {
+    ctx.defer_response().await?;
+    let data = ctx.get_data();
+    data.units.ensure_allowed(&unit, Command::Start)?;
+    data.systemctl.run(&["start", &unit]).await?;
+    ctx.respond(format!("Started {}", unit)).await?;
+    Ok(())
 }
 
 /// Starts units
@@ -40,12 +46,16 @@ pub async fn start(
     #[description = "The unit to start"]
     #[autocomplete = "autocomplete_units"]
     unit: String,
-) -> Result<(), BoxedError> {
-    ctx.defer().await?;
-    let data = ctx.data();
-    data.units.ensure_allowed(&unit, Command::Start)?;
-    data.runner.run(systemctl().arg("start").arg(&unit)).await?;
-    ctx.say(format!("Started {}", unit)).await?;
+) -> Result<()> {
+    start_inner(ctx, unit).await
+}
+
+async fn stop_inner(ctx: impl CommandContext, unit: String) -> Result<()> {
+    ctx.defer_response().await?;
+    let data = ctx.get_data();
+    data.units.ensure_allowed(&unit, Command::Stop)?;
+    data.systemctl.run(&["stop", &unit]).await?;
+    ctx.respond(format!("Stopped {}", unit)).await?;
     Ok(())
 }
 
@@ -56,12 +66,16 @@ pub async fn stop(
     #[description = "The unit to stop"]
     #[autocomplete = "autocomplete_units"]
     unit: String,
-) -> Result<(), BoxedError> {
-    ctx.defer().await?;
-    let data = ctx.data();
-    data.units.ensure_allowed(&unit, Command::Stop)?;
-    data.runner.run(systemctl().arg("stop").arg(&unit)).await?;
-    ctx.say(format!("Stopped {}", unit)).await?;
+) -> Result<()> {
+    stop_inner(ctx, unit).await
+}
+
+async fn restart_inner(ctx: impl CommandContext, unit: String) -> Result<()> {
+    ctx.defer_response().await?;
+    let data = ctx.get_data();
+    data.units.ensure_allowed(&unit, Command::Restart)?;
+    data.systemctl.run(&["restart", &unit]).await?;
+    ctx.respond(format!("Stopped {}", unit)).await?;
     Ok(())
 }
 
@@ -72,27 +86,13 @@ pub async fn restart(
     #[description = "The unit to restart"]
     #[autocomplete = "autocomplete_units"]
     unit: String,
-) -> Result<(), BoxedError> {
-    ctx.defer().await?;
-    let data = ctx.data();
-    data.units.ensure_allowed(&unit, Command::Restart)?;
-    data.runner
-        .run(systemctl().arg("restart").arg(&unit))
-        .await?;
-    ctx.say(format!("Stopped {}", unit)).await?;
-    Ok(())
+) -> Result<()> {
+    restart_inner(ctx, unit).await
 }
 
-/// Checks units' status
-#[command(slash_command)]
-pub async fn status(
-    ctx: Context<'_>,
-    #[description = "The unit to check"]
-    #[autocomplete = "autocomplete_units"]
-    unit: Option<String>,
-) -> Result<(), BoxedError> {
-    ctx.defer().await?;
-    let data = ctx.data();
+async fn status_inner(ctx: impl CommandContext, unit: Option<String>) -> Result<()> {
+    ctx.defer_response().await?;
+    let data = ctx.get_data();
     let response = match unit {
         Some(unit) => {
             data.units.ensure_allowed(&unit, Command::Status)?;
@@ -114,13 +114,24 @@ pub async fn status(
             }
         }
     };
-    ctx.say(response).await?;
+    ctx.respond(response).await?;
     Ok(())
+}
+
+/// Checks units' status
+#[command(slash_command)]
+pub async fn status(
+    ctx: Context<'_>,
+    #[description = "The unit to check"]
+    #[autocomplete = "autocomplete_units"]
+    unit: Option<String>,
+) -> Result<()> {
+    status_inner(ctx, unit).await
 }
 
 pub fn get_commands(
     command_type: CommandType,
-) -> Vec<poise::structs::Command<Arc<Data>, BoxedError>> {
+) -> Vec<poise::structs::Command<Arc<Data>, anyhow::Error>> {
     let commands = vec![start(), stop(), restart(), status()];
     match command_type {
         CommandType::Multiple => commands,
@@ -134,10 +145,17 @@ pub fn get_commands(
 
 #[cfg(test)]
 mod tests {
+    use mockall::predicate;
+
+    use crate::{
+        client::MockCommandContext, systemctl::MockSystemctl,
+        systemd_status::MockSystemdStatusManager,
+    };
+
     use super::*;
     use std::collections::HashMap;
 
-    fn to_names(commands: &Vec<poise::structs::Command<Arc<Data>, BoxedError>>) -> Vec<&str> {
+    fn to_names(commands: &Vec<poise::structs::Command<Arc<Data>, anyhow::Error>>) -> Vec<&str> {
         commands
             .into_iter()
             .map(|command| command.name.as_str())
@@ -160,6 +178,37 @@ mod tests {
                 )])),
             ),
             vec![("ab", "ab.service"), ("abc", "abc.service")]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_start() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        ctx.expect_get_data().returning(|| {
+            let mut systemctl = MockSystemctl::new();
+            systemctl
+                .expect_run()
+                .with(predicate::eq([
+                    "start".to_string(),
+                    "startable.service".to_string(),
+                ]))
+                .returning(|_| Ok(()));
+            Arc::from(Data {
+                units: Arc::from(UnitCollection::from(HashMap::from([(
+                    Command::Start,
+                    vec!["startable.service".to_string()],
+                )]))),
+                systemctl: Arc::from(systemctl),
+                systemd_status_manager: Arc::from(MockSystemdStatusManager::new()),
+            })
+        });
+        ctx.expect_respond()
+            .with(predicate::eq("Started startable.service".to_string()))
+            .returning(|_| Ok(()));
+        assert_eq!(
+            start_inner(ctx, "startable.service".to_string()).await.ok(),
+            Some(())
         );
     }
 

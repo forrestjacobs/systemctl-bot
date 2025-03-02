@@ -1,28 +1,54 @@
 use crate::{
     commands::get_commands,
     config::{CommandType, UnitCollection},
-    process::ProcessRunner,
     status_monitor::StatusMonitor,
+    systemctl::Systemctl,
     systemd_status::SystemdStatusManager,
 };
-use poise::{samples::register_in_guild, serenity_prelude::GuildId, Framework, FrameworkOptions};
+use mockall::automock;
+use poise::{
+    samples::register_in_guild,
+    serenity_prelude::{self, GuildId},
+    Framework, FrameworkOptions,
+};
 use std::sync::Arc;
 
 pub struct Data {
     pub units: Arc<UnitCollection>,
-    pub runner: Arc<dyn ProcessRunner>,
+    pub systemctl: Arc<dyn Systemctl>,
     pub systemd_status_manager: Arc<dyn SystemdStatusManager>,
 }
 
-pub type BoxedError = Box<dyn std::error::Error + Send + Sync>;
-pub type Context<'a> = poise::Context<'a, Arc<Data>, BoxedError>;
+pub type Context<'a> = poise::Context<'a, Arc<Data>, anyhow::Error>;
+
+#[automock]
+pub trait CommandContext {
+    async fn defer_response(&self) -> Result<(), serenity_prelude::Error>;
+    fn get_data(&self) -> Arc<Data>;
+    async fn respond(&self, response: String) -> Result<(), serenity_prelude::Error>;
+}
+
+impl CommandContext for Context<'_> {
+    async fn defer_response(&self) -> Result<(), serenity_prelude::Error> {
+        self.defer().await
+    }
+
+    fn get_data(&self) -> Arc<Data> {
+        self.data().clone()
+    }
+
+    async fn respond(&self, response: String) -> Result<(), serenity_prelude::Error> {
+        self.say(response).await?;
+        Ok(())
+    }
+}
 
 pub fn build_framework(
     guild_id: GuildId,
     command_type: CommandType,
     status_monitor: Arc<dyn StatusMonitor>,
     data: Arc<Data>,
-) -> Framework<Arc<Data>, BoxedError> {
+) -> Framework<Arc<Data>, anyhow::Error> {
     Framework::builder()
         .options(FrameworkOptions {
             commands: get_commands(command_type),
