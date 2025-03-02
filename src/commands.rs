@@ -24,7 +24,7 @@ fn get_potential_units<'a>(
 }
 
 async fn autocomplete_units<'a>(ctx: Context<'a>, partial: &'a str) -> Vec<AutocompleteChoice> {
-    get_potential_units(&ctx.command().name, partial, &ctx.data().units)
+    get_potential_units(&ctx.command().name, partial, &ctx.get_units())
         .into_iter()
         .map(|(name, value)| AutocompleteChoice::new(name, value))
         .collect()
@@ -32,9 +32,8 @@ async fn autocomplete_units<'a>(ctx: Context<'a>, partial: &'a str) -> Vec<Autoc
 
 async fn start_inner(ctx: impl CommandContext, unit: String) -> Result<()> {
     ctx.defer_response().await?;
-    let data = ctx.get_data();
-    data.units.ensure_allowed(&unit, Command::Start)?;
-    data.systemctl.run(&["start", &unit]).await?;
+    ctx.get_units().ensure_allowed(&unit, Command::Start)?;
+    ctx.get_systemctl().run(&["start", &unit]).await?;
     ctx.respond(format!("Started {}", unit)).await?;
     Ok(())
 }
@@ -52,9 +51,8 @@ pub async fn start(
 
 async fn stop_inner(ctx: impl CommandContext, unit: String) -> Result<()> {
     ctx.defer_response().await?;
-    let data = ctx.get_data();
-    data.units.ensure_allowed(&unit, Command::Stop)?;
-    data.systemctl.run(&["stop", &unit]).await?;
+    ctx.get_units().ensure_allowed(&unit, Command::Stop)?;
+    ctx.get_systemctl().run(&["stop", &unit]).await?;
     ctx.respond(format!("Stopped {}", unit)).await?;
     Ok(())
 }
@@ -72,9 +70,8 @@ pub async fn stop(
 
 async fn restart_inner(ctx: impl CommandContext, unit: String) -> Result<()> {
     ctx.defer_response().await?;
-    let data = ctx.get_data();
-    data.units.ensure_allowed(&unit, Command::Restart)?;
-    data.systemctl.run(&["restart", &unit]).await?;
+    ctx.get_units().ensure_allowed(&unit, Command::Restart)?;
+    ctx.get_systemctl().run(&["restart", &unit]).await?;
     ctx.respond(format!("Stopped {}", unit)).await?;
     Ok(())
 }
@@ -92,16 +89,15 @@ pub async fn restart(
 
 async fn status_inner(ctx: impl CommandContext, unit: Option<String>) -> Result<()> {
     ctx.defer_response().await?;
-    let data = ctx.get_data();
+    let systemd_status_manager = ctx.get_systemd_status_manager();
     let response = match unit {
         Some(unit) => {
-            data.units.ensure_allowed(&unit, Command::Status)?;
-            data.systemd_status_manager.status(&unit).await?
+            ctx.get_units().ensure_allowed(&unit, Command::Status)?;
+            systemd_status_manager.status(&unit).await?
         }
         None => {
-            let lines = data
-                .systemd_status_manager
-                .statuses(&data.units[&Command::Status])
+            let lines = systemd_status_manager
+                .statuses(&ctx.get_units()[&Command::Status])
                 .await
                 .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
                 .filter(|(_, status)| status != "inactive")
@@ -145,14 +141,9 @@ pub fn get_commands(
 
 #[cfg(test)]
 mod tests {
-    use mockall::predicate;
-
-    use crate::{
-        client::MockCommandContext, systemctl::MockSystemctl,
-        systemd_status::MockSystemdStatusManager,
-    };
-
     use super::*;
+    use crate::{client::MockCommandContext, systemctl::MockSystemctl};
+    use mockall::predicate;
     use std::collections::HashMap;
 
     fn to_names(commands: &Vec<poise::structs::Command<Arc<Data>, anyhow::Error>>) -> Vec<&str> {
@@ -185,7 +176,12 @@ mod tests {
     async fn test_start() {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
-        ctx.expect_get_data().returning(|| {
+        ctx.expect_get_units()
+            .return_const(Arc::from(UnitCollection::from(HashMap::from([(
+                Command::Start,
+                vec!["startable.service".to_string()],
+            )]))));
+        ctx.expect_get_systemctl().returning(|| {
             let mut systemctl = MockSystemctl::new();
             systemctl
                 .expect_run()
@@ -194,14 +190,7 @@ mod tests {
                     "startable.service".to_string(),
                 ]))
                 .returning(|_| Ok(()));
-            Arc::from(Data {
-                units: Arc::from(UnitCollection::from(HashMap::from([(
-                    Command::Start,
-                    vec!["startable.service".to_string()],
-                )]))),
-                systemctl: Arc::from(systemctl),
-                systemd_status_manager: Arc::from(MockSystemdStatusManager::new()),
-            })
+            Arc::from(systemctl)
         });
         ctx.expect_respond()
             .with(predicate::eq("Started startable.service".to_string()))

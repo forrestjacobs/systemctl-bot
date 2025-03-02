@@ -24,8 +24,11 @@ pub type Context<'a> = poise::Context<'a, Arc<Data>, anyhow::Error>;
 #[automock]
 pub trait CommandContext {
     async fn defer_response(&self) -> Result<(), serenity_prelude::Error>;
-    fn get_data(&self) -> Arc<Data>;
     async fn respond(&self, response: String) -> Result<(), serenity_prelude::Error>;
+
+    fn get_units(&self) -> Arc<UnitCollection>;
+    fn get_systemctl(&self) -> Arc<dyn Systemctl>;
+    fn get_systemd_status_manager(&self) -> Arc<dyn SystemdStatusManager>;
 }
 
 impl CommandContext for Context<'_> {
@@ -33,13 +36,19 @@ impl CommandContext for Context<'_> {
         self.defer().await
     }
 
-    fn get_data(&self) -> Arc<Data> {
-        self.data().clone()
-    }
-
     async fn respond(&self, response: String) -> Result<(), serenity_prelude::Error> {
         self.say(response).await?;
         Ok(())
+    }
+
+    fn get_units(&self) -> Arc<UnitCollection> {
+        self.data().units.clone()
+    }
+    fn get_systemctl(&self) -> Arc<dyn Systemctl> {
+        self.data().systemctl.clone()
+    }
+    fn get_systemd_status_manager(&self) -> Arc<dyn SystemdStatusManager> {
+        self.data().systemd_status_manager.clone()
     }
 }
 
