@@ -1,21 +1,31 @@
 use crate::client::{BoxedError, Context, Data};
-use crate::config::{Command, CommandType};
+use crate::config::{Command, CommandType, UnitCollection};
 use poise::command;
 use poise::serenity_prelude::AutocompleteChoice;
-use std::iter::empty;
 use std::sync::Arc;
 
-async fn autocomplete_units<'a>(ctx: Context<'a>, partial: &'a str) -> Vec<AutocompleteChoice> {
-    let Ok(command) = Command::try_from(ctx.command().name.as_str()) else {
-        return empty().collect();
+fn get_potential_units<'a>(
+    command: &'a str,
+    partial: &'a str,
+    units: &'a UnitCollection,
+) -> Vec<(&'a str, &'a str)> {
+    let Ok(command) = Command::try_from(command) else {
+        return Vec::new();
     };
-    ctx.data().units[&command]
+    units[&command]
         .iter()
         .filter(move |unit| unit.starts_with(partial))
         .map(|unit| {
-            let alias = unit.strip_suffix(".service").unwrap_or(unit);
-            AutocompleteChoice::new(alias, unit.as_str())
+            let alias: &str = unit.strip_suffix(".service").unwrap_or(unit);
+            (alias, unit.as_str())
         })
+        .collect()
+}
+
+async fn autocomplete_units<'a>(ctx: Context<'a>, partial: &'a str) -> Vec<AutocompleteChoice> {
+    get_potential_units(&ctx.command().name, partial, &ctx.data().units)
+        .into_iter()
+        .map(|(name, value)| AutocompleteChoice::new(name, value))
         .collect()
 }
 
@@ -125,12 +135,32 @@ pub fn get_commands(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     fn to_names(commands: &Vec<poise::structs::Command<Arc<Data>, BoxedError>>) -> Vec<&str> {
         commands
             .into_iter()
             .map(|command| command.name.as_str())
             .collect()
+    }
+
+    #[test]
+    fn test_potential_units() {
+        assert_eq!(
+            get_potential_units(
+                "start",
+                "ab",
+                &HashMap::from([(
+                    Command::Start,
+                    vec![
+                        String::from("ab.service"),
+                        String::from("abc.service"),
+                        String::from("acd.service")
+                    ],
+                )]),
+            ),
+            vec![("ab", "ab.service"), ("abc", "abc.service")]
+        );
     }
 
     #[test]
