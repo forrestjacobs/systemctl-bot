@@ -1,68 +1,17 @@
 use crate::{
     commands::get_commands,
     config::{CommandType, UnitCollection},
-    process::{ProcessError, ProcessRunner},
+    process::ProcessRunner,
     status_monitor::StatusMonitor,
     systemd_status::SystemdStatusManager,
 };
 use poise::{samples::register_in_guild, serenity_prelude::GuildId, Framework, FrameworkOptions};
-use std::{
-    error::Error,
-    fmt::{self, Display, Formatter},
-    sync::Arc,
-};
-
-#[derive(Debug)]
-pub enum CommandRunnerError {
-    ProcessError(ProcessError),
-    ZbusError(zbus::Error),
-    NotAllowed,
-}
-
-impl Display for CommandRunnerError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            CommandRunnerError::ProcessError(e) => write!(f, "{}", e),
-            CommandRunnerError::ZbusError(e) => write!(f, "{}", e),
-            CommandRunnerError::NotAllowed => {
-                write!(f, "Command is not allowed")
-            }
-        }
-    }
-}
-
-impl Error for CommandRunnerError {}
-
-impl From<ProcessError> for CommandRunnerError {
-    fn from(error: ProcessError) -> Self {
-        CommandRunnerError::ProcessError(error)
-    }
-}
-
-impl From<zbus::Error> for CommandRunnerError {
-    fn from(error: zbus::Error) -> Self {
-        CommandRunnerError::ZbusError(error)
-    }
-}
+use std::sync::Arc;
 
 pub struct Data {
     pub units: Arc<UnitCollection>,
     pub runner: Arc<dyn ProcessRunner>,
     pub systemd_status_manager: Arc<dyn SystemdStatusManager>,
-}
-
-impl Data {
-    pub fn ensure_allowed(
-        &self,
-        unit: &String,
-        command: crate::config::Command,
-    ) -> Result<(), CommandRunnerError> {
-        if self.units[&command].contains(unit) {
-            Ok(())
-        } else {
-            Err(CommandRunnerError::NotAllowed)
-        }
-    }
 }
 
 pub type BoxedError = Box<dyn std::error::Error + Send + Sync>;

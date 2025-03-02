@@ -43,7 +43,7 @@ pub async fn start(
 ) -> Result<(), BoxedError> {
     ctx.defer().await?;
     let data = ctx.data();
-    data.ensure_allowed(&unit, Command::Start)?;
+    data.units.ensure_allowed(&unit, Command::Start)?;
     data.runner.run(systemctl().arg("start").arg(&unit)).await?;
     ctx.say(format!("Started {}", unit)).await?;
     Ok(())
@@ -59,7 +59,7 @@ pub async fn stop(
 ) -> Result<(), BoxedError> {
     ctx.defer().await?;
     let data = ctx.data();
-    data.ensure_allowed(&unit, Command::Stop)?;
+    data.units.ensure_allowed(&unit, Command::Stop)?;
     data.runner.run(systemctl().arg("stop").arg(&unit)).await?;
     ctx.say(format!("Stopped {}", unit)).await?;
     Ok(())
@@ -75,7 +75,7 @@ pub async fn restart(
 ) -> Result<(), BoxedError> {
     ctx.defer().await?;
     let data = ctx.data();
-    data.ensure_allowed(&unit, Command::Restart)?;
+    data.units.ensure_allowed(&unit, Command::Restart)?;
     data.runner
         .run(systemctl().arg("restart").arg(&unit))
         .await?;
@@ -95,7 +95,7 @@ pub async fn status(
     let data = ctx.data();
     let response = match unit {
         Some(unit) => {
-            data.ensure_allowed(&unit, Command::Status)?;
+            data.units.ensure_allowed(&unit, Command::Status)?;
             data.systemd_status_manager.status(&unit).await?
         }
         None => {
@@ -150,14 +150,14 @@ mod tests {
             get_potential_units(
                 "start",
                 "ab",
-                &HashMap::from([(
+                &UnitCollection::from(HashMap::from([(
                     Command::Start,
                     vec![
                         String::from("ab.service"),
                         String::from("abc.service"),
                         String::from("acd.service")
                     ],
-                )]),
+                )])),
             ),
             vec![("ab", "ab.service"), ("abc", "abc.service")]
         );

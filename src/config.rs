@@ -5,6 +5,7 @@ use serde::{self, Deserialize, Deserializer};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
+use std::ops::Deref;
 
 #[derive(Debug, Hash, PartialEq, Eq)]
 pub enum Command {
@@ -66,7 +67,47 @@ struct Unit {
     permissions: HashSet<UnitPermission>,
 }
 
-pub type UnitCollection = HashMap<Command, Vec<String>>;
+#[derive(Debug, PartialEq)]
+pub struct NotAllowedError {}
+
+impl Display for NotAllowedError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "Command is not allowed")
+    }
+}
+
+impl Error for NotAllowedError {}
+
+#[derive(Debug, PartialEq)]
+pub struct UnitCollection(HashMap<Command, Vec<String>>);
+
+impl From<HashMap<Command, Vec<String>>> for UnitCollection {
+    fn from(value: HashMap<Command, Vec<String>>) -> Self {
+        UnitCollection(value)
+    }
+}
+
+impl UnitCollection {
+    pub fn ensure_allowed(
+        &self,
+        unit: &str,
+        command: crate::config::Command,
+    ) -> Result<(), NotAllowedError> {
+        if self.0[&command].iter().any(|u| u == unit) {
+            Ok(())
+        } else {
+            Err(NotAllowedError {})
+        }
+    }
+}
+
+impl Deref for UnitCollection {
+    type Target = HashMap<Command, Vec<String>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct Config {
@@ -126,7 +167,7 @@ where
             get_units_with_perms(&units, [UnitPermission::Status]),
         ),
     ]);
-    Ok(units)
+    Ok(UnitCollection::from(units))
 }
 
 #[derive(Parser, Debug)]
@@ -159,6 +200,22 @@ mod tests {
         assert_eq!(Command::try_from("status"), Ok(Command::Status));
         assert_eq!(Command::try_from("restart"), Ok(Command::Restart));
         assert_eq!(Command::try_from("random"), Err(CommandParseError));
+    }
+
+    #[test]
+    fn ensure_allowed() {
+        let collection = UnitCollection::from(HashMap::from([(
+            Command::Start,
+            vec![String::from("start.service")],
+        )]));
+        assert_eq!(
+            collection.ensure_allowed("start.service", Command::Start),
+            Ok(())
+        );
+        assert_eq!(
+            collection.ensure_allowed("random.service", Command::Start),
+            Err(NotAllowedError {})
+        );
     }
 
     #[test]
@@ -198,7 +255,7 @@ mod tests {
                 discord_token: String::from("88888888.88888888.88888888"),
                 guild_id: GuildId::new(4444),
                 command_type: CommandType::Multiple,
-                units: HashMap::from([
+                units: UnitCollection(HashMap::from([
                     (
                         Command::Start,
                         vec![all.clone(), String::from("start.service")],
@@ -209,7 +266,7 @@ mod tests {
                         Command::Status,
                         vec![all.clone(), String::from("status.service")],
                     ),
-                ]),
+                ])),
             }
         );
     }
