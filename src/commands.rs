@@ -143,6 +143,7 @@ pub fn get_commands(
 mod tests {
     use super::*;
     use crate::{client::MockCommandContext, systemctl::MockSystemctl};
+    use anyhow::bail;
     use mockall::predicate;
     use std::collections::HashMap;
 
@@ -169,6 +170,19 @@ mod tests {
                 )])),
             ),
             vec![("ab", "ab.service"), ("abc", "abc.service")]
+        );
+    }
+
+    #[tokio::test]
+    async fn start_fails_on_defer() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response()
+            .returning(|| bail!("Test error"));
+        assert_eq!(
+            start_inner(ctx, "startable.service".to_string())
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Test error".to_string())
         );
     }
 

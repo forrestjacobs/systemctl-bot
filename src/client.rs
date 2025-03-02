@@ -5,12 +5,9 @@ use crate::{
     systemctl::Systemctl,
     systemd_status::SystemdStatusManager,
 };
+use anyhow::{Error, Result};
 use mockall::automock;
-use poise::{
-    samples::register_in_guild,
-    serenity_prelude::{self, GuildId},
-    Framework, FrameworkOptions,
-};
+use poise::{samples::register_in_guild, serenity_prelude::GuildId, Framework, FrameworkOptions};
 use std::sync::Arc;
 
 pub struct Data {
@@ -19,12 +16,12 @@ pub struct Data {
     pub systemd_status_manager: Arc<dyn SystemdStatusManager>,
 }
 
-pub type Context<'a> = poise::Context<'a, Arc<Data>, anyhow::Error>;
+pub type Context<'a> = poise::Context<'a, Arc<Data>, Error>;
 
 #[automock]
 pub trait CommandContext {
-    async fn defer_response(&self) -> Result<(), serenity_prelude::Error>;
-    async fn respond(&self, response: String) -> Result<(), serenity_prelude::Error>;
+    async fn defer_response(&self) -> Result<()>;
+    async fn respond(&self, response: String) -> Result<()>;
 
     fn get_units(&self) -> Arc<UnitCollection>;
     fn get_systemctl(&self) -> Arc<dyn Systemctl>;
@@ -32,11 +29,12 @@ pub trait CommandContext {
 }
 
 impl CommandContext for Context<'_> {
-    async fn defer_response(&self) -> Result<(), serenity_prelude::Error> {
-        self.defer().await
+    async fn defer_response(&self) -> Result<()> {
+        self.defer().await?;
+        Ok(())
     }
 
-    async fn respond(&self, response: String) -> Result<(), serenity_prelude::Error> {
+    async fn respond(&self, response: String) -> Result<()> {
         self.say(response).await?;
         Ok(())
     }
@@ -57,7 +55,7 @@ pub fn build_framework(
     command_type: CommandType,
     status_monitor: Arc<dyn StatusMonitor>,
     data: Arc<Data>,
-) -> Framework<Arc<Data>, anyhow::Error> {
+) -> Framework<Arc<Data>, Error> {
     Framework::builder()
         .options(FrameworkOptions {
             commands: get_commands(command_type),
