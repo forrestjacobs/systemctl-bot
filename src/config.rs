@@ -35,17 +35,12 @@ enum UnitPermission {
     Status,
 }
 
-#[derive(Debug, Deserialize, Hash, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CommandType {
+    #[default]
     Single,
     Multiple,
-}
-
-impl Default for CommandType {
-    fn default() -> Self {
-        CommandType::Single
-    }
 }
 
 #[derive(Debug, Deserialize)]
