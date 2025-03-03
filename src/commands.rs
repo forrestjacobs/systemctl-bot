@@ -142,7 +142,10 @@ pub fn get_commands(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{client::MockCommandContext, config::UnitCollection, systemctl::MockSystemctl};
+    use crate::{
+        client::MockCommandContext, config::UnitCollection, systemctl::MockSystemctl,
+        systemd_status::MockSystemdStatusManager,
+    };
     use anyhow::bail;
     use mockall::predicate;
     use std::collections::HashMap;
@@ -173,6 +176,31 @@ mod tests {
                 .returning(move |_| if is_ok { Ok(()) } else { bail!("Run error") });
             Arc::from(systemctl)
         });
+    }
+
+    fn disallow_systemctl_status(ctx: &mut MockCommandContext) {
+        ctx.expect_get_systemd_status_manager().return_once(|| {
+            let mut manager = MockSystemdStatusManager::new();
+            manager.expect_status().never();
+            manager.expect_status_stream().never();
+            Arc::from(manager)
+        });
+    }
+
+    fn mock_status<'a>(
+        ctx: &'a mut MockCommandContext,
+        unit: String,
+        status: zbus::Result<String>,
+    ) {
+        ctx.expect_get_systemd_status_manager()
+            .return_once(move || {
+                let mut manager = MockSystemdStatusManager::new();
+                manager
+                    .expect_status()
+                    .with(predicate::eq(unit))
+                    .return_once(|_| status);
+                Arc::from(manager)
+            });
     }
 
     fn mock_respond(ctx: &mut MockCommandContext, response: &str, is_ok: bool) {
@@ -425,6 +453,90 @@ mod tests {
         mock_respond(&mut ctx, "Restarted restartable.service", true);
         assert_eq!(
             restart_inner(ctx, "restartable.service".to_string())
+                .await
+                .ok(),
+            Some(())
+        );
+    }
+
+    #[tokio::test]
+    async fn single_status_fails_on_defer() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response()
+            .returning(|| bail!("Defer error"));
+        disallow_systemctl_status(&mut ctx);
+        assert_eq!(
+            status_inner(ctx, Some("checkable.service".to_string()))
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Defer error".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn single_status_missing_permissions() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Status, &[]);
+        disallow_systemctl_status(&mut ctx);
+        assert_eq!(
+            status_inner(ctx, Some("checkable.service".to_string()))
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Command is not allowed".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn single_status_fails_on_run() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Status, &["checkable.service"]);
+        mock_status(
+            &mut ctx,
+            "checkable.service".to_string(),
+            Err(zbus::Error::InvalidReply),
+        );
+        assert_eq!(
+            status_inner(ctx, Some("checkable.service".to_string()))
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Invalid D-Bus method reply".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn single_status_fails_on_respond() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Status, &["checkable.service"]);
+        mock_status(
+            &mut ctx,
+            "checkable.service".to_string(),
+            Ok("active".to_string()),
+        );
+        mock_respond(&mut ctx, "active", false);
+        assert_eq!(
+            status_inner(ctx, Some("checkable.service".to_string()))
+                .await
+                .map_err(|e| e.to_string()),
+            Err("Response error".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn single_status() {
+        let mut ctx = MockCommandContext::new();
+        ctx.expect_defer_response().returning(|| Ok(()));
+        mock_units(&mut ctx, Command::Status, &["checkable.service"]);
+        mock_status(
+            &mut ctx,
+            "checkable.service".to_string(),
+            Ok("active".to_string()),
+        );
+        mock_respond(&mut ctx, "active", true);
+        assert_eq!(
+            status_inner(ctx, Some("checkable.service".to_string()))
                 .await
                 .ok(),
             Some(())

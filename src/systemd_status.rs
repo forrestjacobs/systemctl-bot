@@ -12,8 +12,8 @@ pub trait SystemdStatusManager: Any + Sync + Send {
 
 mock! {
     pub SystemdStatusManager {
-        async fn status(&self, unit: &str) -> Result<String>;
-        async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'static, String>>;
+        pub async fn status(&self, unit: &str) -> Result<String>;
+        pub async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'static, String>>;
     }
 }
 
