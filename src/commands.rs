@@ -1,18 +1,18 @@
 use crate::client::{CommandContext, Context, Data};
-use crate::config::{Command, CommandType, UnitCollection};
+use crate::config::{Command, CommandType};
 use anyhow::Result;
 use poise::command;
 use poise::serenity_prelude::AutocompleteChoice;
 use std::sync::Arc;
 
 fn get_potential_units<'a>(
-    command: &'a str,
+    ctx: &'a impl CommandContext,
     partial: &'a str,
-    units: &'a UnitCollection,
 ) -> Vec<(&'a str, &'a str)> {
-    let Ok(command) = Command::try_from(command) else {
+    let Ok(command) = Command::try_from(ctx.get_command_name()) else {
         return Vec::new();
     };
+    let units = ctx.get_units();
     units[&command]
         .iter()
         .filter(move |unit| unit.starts_with(partial))
@@ -24,7 +24,7 @@ fn get_potential_units<'a>(
 }
 
 async fn autocomplete_units<'a>(ctx: Context<'a>, partial: &'a str) -> Vec<AutocompleteChoice> {
-    get_potential_units(&ctx.command().name, partial, &ctx.get_units())
+    get_potential_units(&ctx, partial)
         .into_iter()
         .map(|(name, value)| AutocompleteChoice::new(name, value))
         .collect()
@@ -142,7 +142,7 @@ pub fn get_commands(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{client::MockCommandContext, systemctl::MockSystemctl};
+    use crate::{client::MockCommandContext, config::UnitCollection, systemctl::MockSystemctl};
     use anyhow::bail;
     use mockall::predicate;
     use std::collections::HashMap;
@@ -197,21 +197,26 @@ mod tests {
 
     #[test]
     fn test_potential_units() {
+        let mut ctx: MockCommandContext = MockCommandContext::new();
+        ctx.expect_get_command_name()
+            .return_const("start".to_string());
+        mock_units(
+            &mut ctx,
+            Command::Start,
+            &["ab.service", "abc.service", "acd.service"],
+        );
         assert_eq!(
-            get_potential_units(
-                "start",
-                "ab",
-                &UnitCollection::from(HashMap::from([(
-                    Command::Start,
-                    vec![
-                        String::from("ab.service"),
-                        String::from("abc.service"),
-                        String::from("acd.service")
-                    ],
-                )])),
-            ),
+            get_potential_units(&ctx, "ab"),
             vec![("ab", "ab.service"), ("abc", "abc.service")]
         );
+    }
+
+    #[test]
+    fn test_potential_units_for_unknown_command() {
+        let mut ctx: MockCommandContext = MockCommandContext::new();
+        ctx.expect_get_command_name()
+            .return_const("random".to_string());
+        assert_eq!(get_potential_units(&ctx, "ab"), Vec::new());
     }
 
     #[tokio::test]

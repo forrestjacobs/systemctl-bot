@@ -23,7 +23,8 @@ pub trait CommandContext {
     async fn defer_response(&self) -> Result<()>;
     async fn respond(&self, response: String) -> Result<()>;
 
-    fn get_units(&self) -> Arc<UnitCollection>;
+    fn get_command_name(&self) -> &str;
+    fn get_units(&self) -> &Arc<UnitCollection>;
     fn get_systemctl(&self) -> Arc<dyn Systemctl>;
     fn get_systemd_status_manager(&self) -> Arc<dyn SystemdStatusManager>;
 }
@@ -39,8 +40,12 @@ impl CommandContext for Context<'_> {
         Ok(())
     }
 
-    fn get_units(&self) -> Arc<UnitCollection> {
-        self.data().units.clone()
+    fn get_command_name(&self) -> &str {
+        &self.command().name
+    }
+
+    fn get_units(&self) -> &Arc<UnitCollection> {
+        &self.data().units
     }
     fn get_systemctl(&self) -> Arc<dyn Systemctl> {
         self.data().systemctl.clone()
