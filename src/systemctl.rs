@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use mockall::mock;
-use std::any::Any;
+use std::{any::Any, process::Output};
 use tokio::process::Command;
 
 #[async_trait]
@@ -25,11 +25,8 @@ impl Systemctl for MockSystemctl {
 
 pub struct SystemctlImpl;
 
-#[async_trait]
-impl Systemctl for SystemctlImpl {
-    async fn run(&self, args: &[&str]) -> Result<()> {
-        let mut command = Command::new("systemctl");
-        let output = command.args(args).output().await?;
+impl SystemctlImpl {
+    fn respond(output: Output) -> Result<()> {
         if output.status.success() {
             Ok(())
         } else {
@@ -39,5 +36,47 @@ impl Systemctl for SystemctlImpl {
                 String::from_utf8(output.stderr).unwrap()
             )
         }
+    }
+}
+
+#[async_trait]
+impl Systemctl for SystemctlImpl {
+    async fn run(&self, args: &[&str]) -> Result<()> {
+        let mut command = Command::new("systemctl");
+        let output = command.args(args).output().await?;
+        Self::respond(output)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{os::unix::process::ExitStatusExt, process::ExitStatus};
+
+    use super::*;
+
+    #[test]
+    fn test_success_response() {
+        assert_eq!(
+            SystemctlImpl::respond(Output {
+                status: ExitStatus::default(),
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            })
+            .ok(),
+            Some(())
+        );
+    }
+
+    #[test]
+    fn test_error_response() {
+        assert_eq!(
+            SystemctlImpl::respond(Output {
+                status: ExitStatus::from_raw(9),
+                stdout: Vec::new(),
+                stderr: "Example out".as_bytes().into(),
+            })
+            .map_err(|e| e.to_string()),
+            Err("process failed with signal: 9 (SIGKILL)\n\nExample out".to_string())
+        );
     }
 }
