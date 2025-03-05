@@ -88,25 +88,18 @@ mod tests {
     use super::*;
     use zbus::Error;
 
-    struct MockSystemdStatusManager {}
-
-    #[async_trait]
-    impl SystemdStatusManager for MockSystemdStatusManager {
-        async fn status(&self, unit: &str) -> Result<String> {
+    #[tokio::test]
+    async fn get_statuses() {
+        let mut manager = MockSystemdStatusManager::new();
+        manager.expect_status().returning(|unit| {
             if unit == "invalid.service" {
                 Err(Error::InvalidReply)
             } else {
                 Ok(unit.strip_suffix(".service").unwrap_or(unit).into())
             }
-        }
-        async fn status_stream(&self, _unit: &str) -> Result<PropertyStream<'_, String>> {
-            todo!()
-        }
-    }
+        });
 
-    #[tokio::test]
-    async fn get_statuses() {
-        let mock: Box<dyn SystemdStatusManager> = Box::from(MockSystemdStatusManager {});
+        let mock: Box<dyn SystemdStatusManager> = Box::from(manager);
         let units = vec![
             String::from("active.service"),
             String::from("inactive.service"),
