@@ -42,9 +42,7 @@ impl SystemctlImpl {
 #[async_trait]
 impl Systemctl for SystemctlImpl {
     async fn run(&self, args: &[&str]) -> Result<()> {
-        let mut command = Command::new("systemctl");
-        let output = command.args(args).output().await?;
-        Self::respond(output)
+        Self::respond(Command::new("systemctl").args(args).output().await?)
     }
 }
 
