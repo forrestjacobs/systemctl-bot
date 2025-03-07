@@ -1,30 +1,16 @@
 use async_trait::async_trait;
-use futures::future::join_all;
-use mockall::mock;
-use std::any::Any;
-use zbus::{dbus_proxy, Connection, PropertyStream, Result};
+use futures::{future::join_all, Stream, StreamExt};
+use mockall::automock;
+use std::{any::Any, pin::Pin};
+use zbus::{dbus_proxy, Connection, Result};
 
+pub type StatusStream = dyn Stream<Item = String> + Send;
+
+#[automock]
 #[async_trait]
 pub trait SystemdStatusManager: Any + Sync + Send {
     async fn status(&self, unit: &str) -> Result<String>;
-    async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>>;
-}
-
-mock! {
-    pub SystemdStatusManager {
-        pub async fn status(&self, unit: &str) -> Result<String>;
-        pub async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'static, String>>;
-    }
-}
-
-#[async_trait]
-impl SystemdStatusManager for MockSystemdStatusManager {
-    async fn status(&self, unit: &str) -> Result<String> {
-        self.status(unit).await
-    }
-    async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>> {
-        self.status_stream(unit).await
-    }
+    async fn status_stream(&self, unit: &str) -> Result<Pin<Box<StatusStream>>>;
 }
 
 impl dyn SystemdStatusManager {
@@ -77,9 +63,11 @@ impl SystemdStatusManager for SystemdStatusManagerImpl {
         unit.active_state().await
     }
 
-    async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>> {
+    async fn status_stream(&self, unit: &str) -> Result<Pin<Box<StatusStream>>> {
+        let unit_name = unit.to_string();
         let unit = self.client.load_unit(unit).await?;
-        Ok(unit.receive_active_state_changed().await)
+        let stream = unit.receive_active_state_changed().await;
+        Ok(Box::pin(stream.map(move |_| unit_name.clone())))
     }
 }
 
