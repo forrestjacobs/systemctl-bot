@@ -36,9 +36,7 @@ async fn start() -> Result<()> {
         }),
     );
 
-    start_client(config.discord_token, config.application_id, framework).await?;
-
-    Ok(())
+    start_client(config.discord_token, config.application_id, framework).await
 }
 
 #[tokio::main]

@@ -34,8 +34,7 @@ async fn start_inner(ctx: impl CommandContext, unit: String) -> Result<()> {
     ctx.defer_response().await?;
     ctx.get_units().ensure_allowed(&unit, Command::Start)?;
     ctx.get_systemctl().run(&["start", &unit]).await?;
-    ctx.respond(format!("Started {}", unit)).await?;
-    Ok(())
+    ctx.respond(format!("Started {}", unit)).await
 }
 
 /// Starts units
@@ -53,8 +52,7 @@ async fn stop_inner(ctx: impl CommandContext, unit: String) -> Result<()> {
     ctx.defer_response().await?;
     ctx.get_units().ensure_allowed(&unit, Command::Stop)?;
     ctx.get_systemctl().run(&["stop", &unit]).await?;
-    ctx.respond(format!("Stopped {}", unit)).await?;
-    Ok(())
+    ctx.respond(format!("Stopped {}", unit)).await
 }
 
 /// Stops units
@@ -72,8 +70,7 @@ async fn restart_inner(ctx: impl CommandContext, unit: String) -> Result<()> {
     ctx.defer_response().await?;
     ctx.get_units().ensure_allowed(&unit, Command::Restart)?;
     ctx.get_systemctl().run(&["restart", &unit]).await?;
-    ctx.respond(format!("Restarted {}", unit)).await?;
-    Ok(())
+    ctx.respond(format!("Restarted {}", unit)).await
 }
 
 /// Restarts units
@@ -110,8 +107,7 @@ async fn status_inner(ctx: impl CommandContext, unit: Option<String>) -> Result<
             }
         }
     };
-    ctx.respond(response).await?;
-    Ok(())
+    ctx.respond(response).await
 }
 
 /// Checks units' status
