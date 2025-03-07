@@ -5,8 +5,10 @@ use crate::{
     systemctl::Systemctl,
     systemd_status::SystemdStatusManager,
 };
-use anyhow::{Error, Result};
+use anyhow::Error;
+use anyhow::Result;
 use mockall::automock;
+use poise::serenity_prelude::{ApplicationId, Client, GatewayIntents};
 use poise::{samples::register_in_guild, serenity_prelude::GuildId, Framework, FrameworkOptions};
 use std::sync::Arc;
 
@@ -77,4 +79,21 @@ pub fn build_framework(
             })
         })
         .build()
+}
+
+pub async fn start_client(
+    discord_token: String,
+    application_id: ApplicationId,
+    framework: Framework<Arc<Data>, Error>,
+) -> Result<()> {
+    Client::builder(
+        discord_token,
+        GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
+    )
+    .framework(framework)
+    .application_id(application_id)
+    .await?
+    .start()
+    .await?;
+    Ok(())
 }

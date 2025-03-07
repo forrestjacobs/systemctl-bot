@@ -6,9 +6,8 @@ mod systemctl;
 mod systemd_status;
 
 use anyhow::Result;
-use client::{build_framework, Data};
+use client::{build_framework, start_client, Data};
 use config::Config;
-use poise::serenity_prelude::{Client, GatewayIntents};
 use status_monitor::StatusMonitorImpl;
 use std::sync::Arc;
 use systemctl::SystemctlImpl;
@@ -37,15 +36,7 @@ async fn start() -> Result<()> {
         }),
     );
 
-    Client::builder(
-        config.discord_token,
-        GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
-    )
-    .framework(framework)
-    .application_id(config.application_id)
-    .await?
-    .start()
-    .await?;
+    start_client(config.discord_token, config.application_id, framework).await?;
 
     Ok(())
 }
