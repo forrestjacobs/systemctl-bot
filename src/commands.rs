@@ -1,5 +1,5 @@
 use crate::client::{CommandContext, Context, Data};
-use crate::config::{Command, CommandType};
+use crate::config::{Command, CommandType, UnitCollection};
 use anyhow::Result;
 use poise::command;
 use poise::serenity_prelude::AutocompleteChoice;
@@ -123,8 +123,22 @@ pub async fn status(
 
 pub fn get_commands(
     command_type: CommandType,
+    units: &UnitCollection,
 ) -> Vec<poise::structs::Command<Arc<Data>, anyhow::Error>> {
-    let commands = vec![start(), stop(), restart(), status()];
+    let mut commands = Vec::new();
+    if !units[&Command::Start].is_empty() {
+        commands.push(start());
+    }
+    if !units[&Command::Stop].is_empty() {
+        commands.push(stop());
+    }
+    if !units[&Command::Restart].is_empty() {
+        commands.push(restart());
+    }
+    if !units[&Command::Status].is_empty() {
+        commands.push(status());
+    }
+
     match command_type {
         CommandType::Multiple => commands,
         CommandType::Single => vec![poise::Command {
@@ -607,15 +621,29 @@ mod tests {
 
     #[test]
     fn get_multiple_commands() {
+        let service = "test.service".to_string();
+        let unit = UnitCollection::from(HashMap::from([
+            (Command::Start, vec![service.clone()]),
+            (Command::Stop, vec![service.clone()]),
+            (Command::Restart, vec![service.clone()]),
+            (Command::Status, vec![service.clone()]),
+        ]));
         assert_eq!(
-            to_names(&get_commands(CommandType::Multiple)),
+            to_names(&get_commands(CommandType::Multiple, &unit)),
             vec!["start", "stop", "restart", "status"]
         );
     }
 
     #[test]
     fn get_single_commands() {
-        let commands = get_commands(CommandType::Single);
+        let service = "test.service".to_string();
+        let unit = UnitCollection::from(HashMap::from([
+            (Command::Start, vec![service.clone()]),
+            (Command::Stop, vec![service.clone()]),
+            (Command::Restart, vec![service.clone()]),
+            (Command::Status, vec![service.clone()]),
+        ]));
+        let commands = get_commands(CommandType::Single, &unit);
         assert_eq!(to_names(&commands), vec!["systemctl"]);
         assert_eq!(
             to_names(&commands[0].subcommands),

@@ -65,7 +65,7 @@ pub fn build_framework(
 ) -> Framework<Arc<Data>, Error> {
     Framework::builder()
         .options(FrameworkOptions {
-            commands: get_commands(command_type),
+            commands: get_commands(command_type, &data.units),
             ..Default::default()
         })
         .setup(move |ctx, _ready, framework| {
