@@ -6,8 +6,6 @@
 
 systemctl-bot lets you and your friends start and stop a subset of systemd units from Discord.
 
-🚧 This is still very much a work in progress (both the documentation and the project itself.) As with most hobbyist projects, run this at your own risk.
-
 ## Why?
 
 I wrote this bot because I wanted my friends to be able to log in to my small Minecraft server whenever they wanted, but I didn't want to run the Minecraft server jar 24x7. There are a bunch of control panels and the like for Minecraft, but all we really needed was an on/off switch for a few Minecraft worlds.
