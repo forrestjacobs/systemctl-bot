@@ -43,7 +43,7 @@ I wrote this bot because I wanted my friends to be able to log in to my small Mi
     permissions = ["status"] # only allow status checking
     ```
 
- 7. Run the bot with enough privileges for it to call systemctl. (Once you have this working, you'll probably want to set it up as a systemd service.)
+ 7. Run the bot with enough privileges for it to call systemctl. (Once you have this working, you'll probably want to set it up as a systemd service. You can use the [provided example](./systemd/system/systemctl-bot.service).)
 
     ```sh
     % sudo ./systemctl-bot

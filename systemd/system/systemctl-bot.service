@@ -1,0 +1,10 @@
+[Unit]
+Description=systemctl-bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/systemctl-bot
+
+[Install]
+WantedBy=multi-user.target
