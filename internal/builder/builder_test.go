@@ -25,7 +25,6 @@ func getBuilderTestUnits() map[config.Command][]string {
 		config.StartCommand:   {"startable.service", "restartable.service"},
 		config.StopCommand:    {"stoppable.service", "restartable.service"},
 		config.RestartCommand: {"restartable.service"},
-		config.StatusCommand:  {"startable.service", "stoppable.service", "restartable.service"},
 	}
 }
 
@@ -70,7 +69,7 @@ func TestGetSingleCommand(t *testing.T) {
 		ApplicationID: 1,
 		GuildID:       2,
 		CommandType:   config.Single,
-		Units:         getBuilderTestUnits(),
+		CommandUnits:  getBuilderTestUnits(),
 	}
 	err := builder.RegisterCommands(s, c)
 
@@ -85,7 +84,6 @@ func TestGetSingleCommand(t *testing.T) {
 				makeSubcommand("start", "Start units", makeUnitOption("The unit to start", true, "startable", "restartable")),
 				makeSubcommand("stop", "Stop units", makeUnitOption("The unit to stop", true, "stoppable", "restartable")),
 				makeSubcommand("restart", "Restart units", makeUnitOption("The unit to restart", true, "restartable")),
-				makeSubcommand("status", "Check units' status", makeUnitOption("The unit to check", false, "startable", "stoppable", "restartable")),
 			),
 		},
 	},
@@ -101,7 +99,7 @@ func TestMultipleCommands(t *testing.T) {
 		ApplicationID: 1,
 		GuildID:       2,
 		CommandType:   config.Multiple,
-		Units:         getBuilderTestUnits(),
+		CommandUnits:  getBuilderTestUnits(),
 	}
 	err := builder.RegisterCommands(s, c)
 
@@ -115,7 +113,6 @@ func TestMultipleCommands(t *testing.T) {
 			makeCommand("start", "Start units", makeUnitOption("The unit to start", true, "startable", "restartable")),
 			makeCommand("stop", "Stop units", makeUnitOption("The unit to stop", true, "stoppable", "restartable")),
 			makeCommand("restart", "Restart units", makeUnitOption("The unit to restart", true, "restartable")),
-			makeCommand("status", "Check units' status", makeUnitOption("The unit to check", false, "startable", "stoppable", "restartable")),
 		},
 	}}) {
 		t.Error("Not equal")
@@ -128,7 +125,7 @@ func TestInvalidCommandType(t *testing.T) {
 		ApplicationID: 1,
 		GuildID:       2,
 		CommandType:   "invalid",
-		Units:         getBuilderTestUnits(),
+		CommandUnits:  getBuilderTestUnits(),
 	}
 	err := builder.RegisterCommands(s, c)
 

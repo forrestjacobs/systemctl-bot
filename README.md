@@ -49,7 +49,7 @@ I wrote this bot because I wanted my friends to be able to log in to my small Mi
     % sudo ./systemctl-bot
     ```
 
- 8. You can now control units by typing `/systemctl <start|stop|restart|status> [unit name]` in your Discord server!
+ 8. You can now control units by typing `/systemctl <start|stop|restart> [unit name]` in your Discord server!
 
 ## Configuration
 

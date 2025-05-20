@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/forrestjacobs/systemctl-bot/internal/config"
 )
 
@@ -20,7 +19,6 @@ type Systemd interface {
 	StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
 	StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
 	RestartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
-	GetUnitPropertyContext(ctx context.Context, unit string, propertyName string) (*dbus.Property, error)
 }
 
 type commandCtx struct {
@@ -55,7 +53,7 @@ func getCommandData(data *discordgo.ApplicationCommandInteractionData) (string, 
 func AddHandler(session DiscordSession, systemd Systemd, c *config.Config) {
 	runner := &commandRunner{
 		systemd: systemd,
-		units:   c.Units,
+		units:   c.CommandUnits,
 	}
 	session.AddHandler(func(s *discordgo.Session, event *discordgo.InteractionCreate) {
 		if event.Type != discordgo.InteractionApplicationCommand {

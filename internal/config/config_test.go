@@ -26,12 +26,12 @@ func getBaseConfig() *config.Config {
 		GuildID:       2,
 		DiscordToken:  "a",
 		CommandType:   config.Single,
-		Units: map[config.Command][]string{
+		CommandUnits: map[config.Command][]string{
 			config.StartCommand:   {},
 			config.StopCommand:    {},
 			config.RestartCommand: {},
-			config.StatusCommand:  {"s.service"},
 		},
+		StatusUnits: []string{"s.service"},
 	}
 }
 
@@ -71,12 +71,14 @@ func TestReadConfigWithEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
+	baseConfig := getBaseConfig()
 	if !reflect.DeepEqual(c, &config.Config{
 		ApplicationID: 10,
 		GuildID:       20,
 		DiscordToken:  "Z",
 		CommandType:   config.Multiple,
-		Units:         getBaseConfig().Units,
+		CommandUnits:  baseConfig.CommandUnits,
+		StatusUnits:   baseConfig.StatusUnits,
 	}) {
 		t.Error("Not equal")
 	}
@@ -105,12 +107,12 @@ func TestReadConfigSuppliesDefaults(t *testing.T) {
 		GuildID:       2,
 		DiscordToken:  "a",
 		CommandType:   config.Single,
-		Units: map[config.Command][]string{
+		CommandUnits: map[config.Command][]string{
 			config.StartCommand:   {},
 			config.StopCommand:    {},
 			config.RestartCommand: {},
-			config.StatusCommand:  {"s.service", "t.timer"},
 		},
+		StatusUnits: []string{"s.service", "t.timer"},
 	}) {
 		t.Error("Not equal")
 	}

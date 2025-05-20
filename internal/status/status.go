@@ -17,7 +17,7 @@ type DiscordSession interface {
 }
 
 func UpdateStatusFromUnits(discord DiscordSession, c *config.Config, set SubscriptionSet) {
-	units := c.Units[config.StatusCommand]
+	units := c.StatusUnits
 	for _, unit := range units {
 		set.Add(unit)
 	}

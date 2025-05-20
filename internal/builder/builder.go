@@ -11,7 +11,7 @@ import (
 
 type option = discordgo.ApplicationCommandOption
 
-func getUnitOption(description string, required bool, units []string) option {
+func getUnitOption(description string, units []string) option {
 	choices := []*discordgo.ApplicationCommandOptionChoice{}
 	for _, unit := range units {
 		choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
@@ -23,30 +23,25 @@ func getUnitOption(description string, required bool, units []string) option {
 		Name:        "unit",
 		Type:        discordgo.ApplicationCommandOptionString,
 		Description: description,
-		Required:    required,
+		Required:    true,
 		Choices:     choices,
 	}
 }
 
 func buildCommands(units map[config.Command][]string, callback func(name config.Command, description string, options []*option)) {
 	if len(units[config.StartCommand]) > 0 {
-		unitOption := getUnitOption("The unit to start", true, units[config.StartCommand])
+		unitOption := getUnitOption("The unit to start", units[config.StartCommand])
 		callback(config.StartCommand, "Start units", []*option{&unitOption})
 	}
 
 	if len(units[config.StopCommand]) > 0 {
-		unitOption := getUnitOption("The unit to stop", true, units[config.StopCommand])
+		unitOption := getUnitOption("The unit to stop", units[config.StopCommand])
 		callback(config.StopCommand, "Stop units", []*option{&unitOption})
 	}
 
 	if len(units[config.RestartCommand]) > 0 {
-		unitOption := getUnitOption("The unit to restart", true, units[config.RestartCommand])
+		unitOption := getUnitOption("The unit to restart", units[config.RestartCommand])
 		callback(config.RestartCommand, "Restart units", []*option{&unitOption})
-	}
-
-	if len(units[config.StatusCommand]) > 0 {
-		unitOption := getUnitOption("The unit to check", false, units[config.StatusCommand])
-		callback(config.StatusCommand, "Check units' status", []*option{&unitOption})
 	}
 }
 
@@ -91,7 +86,7 @@ type DiscordSession interface {
 func RegisterCommands(discord DiscordSession, c *config.Config) error {
 	applicationID := strconv.FormatUint(c.ApplicationID, 10)
 	guildID := strconv.FormatUint(c.GuildID, 10)
-	commands, err := getCommands(c.Units, c.CommandType)
+	commands, err := getCommands(c.CommandUnits, c.CommandType)
 	if err != nil {
 		return err
 	}

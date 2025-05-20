@@ -43,9 +43,7 @@ func TestUpdateStatusFromUnits(t *testing.T) {
 	}
 
 	status.UpdateStatusFromUnits(&d, &config.Config{
-		Units: map[config.Command][]string{
-			config.StatusCommand: {"a.service", "b.service"},
-		},
+		StatusUnits: []string{"a.service", "b.service"},
 	}, &s)
 
 	if !reflect.DeepEqual(s.mockCalls, [][]any{

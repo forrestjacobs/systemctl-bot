@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"log"
-	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/forrestjacobs/systemctl-bot/internal/config"
@@ -26,16 +25,6 @@ func getSystemdResponse(doneString string, resultChan <-chan string, err error) 
 	}
 
 	return result
-}
-
-func respond(ctx *commandCtx, content string) {
-	err := ctx.session.InteractionRespond(ctx.interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: content,
-		},
-	})
-	logError(err)
 }
 
 func deferResponse(ctx *commandCtx) bool {
@@ -78,40 +67,6 @@ var commandHandlers = map[config.Command]func(ctx *commandCtx, runner *commandRu
 			resultChan := make(chan string)
 			_, err := runner.systemd.RestartUnitContext(context.Background(), unit, "replace", resultChan)
 			followUp(ctx, getSystemdResponse("Restarted "+unit, resultChan, err))
-		}
-	},
-
-	config.StatusCommand: func(ctx *commandCtx, runner *commandRunner) {
-		if len(ctx.options) == 0 {
-			lines := []string{}
-			for _, unit := range runner.units[config.StatusCommand] {
-				prop, err := runner.systemd.GetUnitPropertyContext(context.Background(), unit, "ActiveState")
-				if err != nil {
-					log.Println("Error fetching unit state: ", err)
-					lines = append(lines, unit+": error getting status")
-					continue
-				}
-				val := prop.Value.Value().(string)
-				if val != "inactive" {
-					lines = append(lines, unit+": "+val)
-				}
-			}
-
-			if len(lines) == 0 {
-				respond(ctx, "Nothing is active")
-			} else {
-				respond(ctx, strings.Join(lines, "\n"))
-			}
-		} else {
-			unit := ctx.options[0].StringValue()
-			if runner.checkAllowed(config.StatusCommand, unit) {
-				prop, err := runner.systemd.GetUnitPropertyContext(context.Background(), unit, "ActiveState")
-				if err != nil {
-					respond(ctx, err.Error())
-				} else {
-					respond(ctx, prop.Value.Value().(string))
-				}
-			}
 		}
 	},
 }

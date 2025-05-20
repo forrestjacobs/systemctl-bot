@@ -18,7 +18,6 @@ const (
 	StartCommand   Command = "start"
 	StopCommand    Command = "stop"
 	RestartCommand Command = "restart"
-	StatusCommand  Command = "status"
 )
 
 type CommandType string
@@ -33,7 +32,8 @@ type Config struct {
 	DiscordToken  string
 	GuildID       uint64
 	CommandType   CommandType
-	Units         map[Command][]string
+	CommandUnits  map[Command][]string
+	StatusUnits   []string
 }
 
 type tomlConfig struct {
@@ -164,11 +164,11 @@ func ReadConfig(r io.Reader) (*Config, error) {
 		DiscordToken:  config.DiscordToken,
 		GuildID:       config.GuildID,
 		CommandType:   config.CommandType,
-		Units: map[Command][]string{
+		CommandUnits: map[Command][]string{
 			StartCommand:   getUnitsWithPermissions(units, StartPermission),
 			StopCommand:    getUnitsWithPermissions(units, StopPermission),
 			RestartCommand: getUnitsWithPermissions(units, StartPermission, StopPermission),
-			StatusCommand:  getUnitsWithPermissions(units, StatusPermission),
 		},
+		StatusUnits: getUnitsWithPermissions(units, StatusPermission),
 	}, getConfigErrors(config)
 }

@@ -4,22 +4,18 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/forrestjacobs/systemctl-bot/internal/config"
 	"github.com/forrestjacobs/systemctl-bot/internal/handler"
-	godbus "github.com/godbus/dbus/v5"
 )
 
 var baseConfig = &config.Config{
-	Units: map[config.Command][]string{
+	CommandUnits: map[config.Command][]string{
 		config.StartCommand:   {"startable.service"},
 		config.StopCommand:    {"stoppable.service"},
 		config.RestartCommand: {"restartable.service"},
-		config.StatusCommand:  {"active.service", "reloading.service", "inactive.service"},
 	},
 }
 
@@ -90,17 +86,6 @@ func (s *handlerMocks) RestartUnitContext(ctx context.Context, name string, mode
 	return s.handleUnitCommand("RestartUnitContext", name, mode, ch)
 }
 
-func (s *handlerMocks) GetUnitPropertyContext(ctx context.Context, unit string, propertyName string) (*dbus.Property, error) {
-	s.calls = append(s.calls, mockCall{name: "systemd.GetUnitPropertyContext", args: []any{unit, propertyName}})
-	if s.systemdError != nil {
-		return nil, s.systemdError
-	}
-	return &dbus.Property{
-		Name:  propertyName,
-		Value: godbus.MakeVariant(strings.TrimSuffix(unit, ".service")),
-	}, nil
-}
-
 func makeSystemdInteraction(command config.Command, options ...*discordgo.ApplicationCommandInteractionDataOption) *discordgo.Interaction {
 	return &discordgo.Interaction{
 		Type: discordgo.InteractionApplicationCommand,
@@ -121,19 +106,6 @@ func callHandler(mocks *handlerMocks, config *config.Config, interaction *discor
 	mocks.handler.(func(session *discordgo.Session, event *discordgo.InteractionCreate))(nil, &discordgo.InteractionCreate{
 		Interaction: interaction,
 	})
-}
-
-func mockCallForRespond(interaction *discordgo.Interaction, content string) mockCall {
-	resp := discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: content,
-		},
-	}
-	return mockCall{
-		name: "session.InteractionRespond",
-		args: []any{interaction, &resp},
-	}
 }
 
 func mockCallForDeferResponse(interaction *discordgo.Interaction) mockCall {
@@ -158,13 +130,6 @@ func mockCallForUnitAction(verb string, unit string) mockCall {
 	return mockCall{
 		name: "systemd." + verb + "UnitContext",
 		args: []any{unit, "replace"},
-	}
-}
-
-func mockCallForGetUnitActiveState(unit string) mockCall {
-	return mockCall{
-		name: "systemd.GetUnitPropertyContext",
-		args: []any{unit, "ActiveState"},
 	}
 }
 
@@ -351,85 +316,6 @@ func TestRestartSystemdErrorHandler(t *testing.T) {
 func TestRestartDisallowedHandler(t *testing.T) {
 	m := handlerMocks{}
 	interaction := makeSystemdInteraction(config.RestartCommand, makeStringOption("disallowed.service"))
-	callHandler(&m, baseConfig, interaction)
-	if len(m.calls) > 0 {
-		t.Error("Unexpected calls")
-	}
-}
-
-func TestMultiStatusHandler(t *testing.T) {
-	m := handlerMocks{}
-	interaction := makeSystemdInteraction(config.StatusCommand)
-	callHandler(&m, baseConfig, interaction)
-	if !reflect.DeepEqual(m.calls, []mockCall{
-		mockCallForGetUnitActiveState("active.service"),
-		mockCallForGetUnitActiveState("reloading.service"),
-		mockCallForGetUnitActiveState("inactive.service"),
-		mockCallForRespond(interaction, "active.service: active\nreloading.service: reloading"),
-	}) {
-		t.Error("Not equal")
-	}
-}
-
-func TestMultiStatusSystemdErrorHandler(t *testing.T) {
-	m := handlerMocks{
-		systemdError: errors.New("could not get status"),
-	}
-	interaction := makeSystemdInteraction(config.StatusCommand)
-	callHandler(&m, baseConfig, interaction)
-	if !reflect.DeepEqual(m.calls, []mockCall{
-		mockCallForGetUnitActiveState("active.service"),
-		mockCallForGetUnitActiveState("reloading.service"),
-		mockCallForGetUnitActiveState("inactive.service"),
-		mockCallForRespond(interaction, "active.service: error getting status\nreloading.service: error getting status\ninactive.service: error getting status"),
-	}) {
-		t.Error("Not equal")
-	}
-}
-
-func TestNoneActiveStatusHandler(t *testing.T) {
-	m := handlerMocks{}
-	interaction := makeSystemdInteraction(config.StatusCommand)
-	callHandler(&m, &config.Config{
-		Units: map[config.Command][]string{
-			config.StatusCommand: {"inactive.service"},
-		},
-	}, interaction)
-	if !reflect.DeepEqual(m.calls, []mockCall{
-		mockCallForGetUnitActiveState("inactive.service"),
-		mockCallForRespond(interaction, "Nothing is active"),
-	}) {
-		t.Error("Not equal")
-	}
-}
-
-func TestUnitStatusHandler(t *testing.T) {
-	m := handlerMocks{}
-	interaction := makeSystemdInteraction(config.StatusCommand, makeStringOption("reloading.service"))
-	callHandler(&m, baseConfig, interaction)
-	if !reflect.DeepEqual(m.calls, []mockCall{
-		mockCallForGetUnitActiveState("reloading.service"),
-		mockCallForRespond(interaction, "reloading"),
-	}) {
-		t.Error("Not equal")
-	}
-}
-
-func TestUnitStatusSystemdErrorHandler(t *testing.T) {
-	m := handlerMocks{systemdError: errors.New("could not get status")}
-	interaction := makeSystemdInteraction(config.StatusCommand, makeStringOption("reloading.service"))
-	callHandler(&m, baseConfig, interaction)
-	if !reflect.DeepEqual(m.calls, []mockCall{
-		mockCallForGetUnitActiveState("reloading.service"),
-		mockCallForRespond(interaction, "could not get status"),
-	}) {
-		t.Error("Not equal")
-	}
-}
-
-func TestDisallowedUnitStatusHandler(t *testing.T) {
-	m := handlerMocks{}
-	interaction := makeSystemdInteraction(config.StatusCommand, makeStringOption("disallowed.service"))
 	callHandler(&m, baseConfig, interaction)
 	if len(m.calls) > 0 {
 		t.Error("Unexpected calls")
