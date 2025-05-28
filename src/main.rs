@@ -15,17 +15,16 @@ use systemd_status::SystemdStatusManagerImpl;
 
 async fn start() -> Result<()> {
     let config = Config::build()?;
-    let units = config.units;
 
     let framework = build_framework(
         config.guild_id,
         config.command_type,
-        Arc::from(StatusMonitorImpl {
-            units: units.status_units,
-            systemd_status_manager: Arc::from(SystemdStatusManagerImpl::build().await?),
-        }),
+        StatusMonitorImpl {
+            units: config.units.status_units,
+            systemd_status_manager: SystemdStatusManagerImpl::build().await?,
+        },
         Arc::from(Data {
-            units: units.command_units,
+            units: config.units.command_units,
             systemctl: Arc::from(SystemctlImpl {}),
         }),
     );

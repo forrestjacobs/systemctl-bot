@@ -14,15 +14,13 @@ pub trait SystemdStatusManager: Any + Sync + Send {
     async fn status_stream(&self, unit: &str) -> Result<Pin<Box<StatusStream>>>;
 }
 
-impl dyn SystemdStatusManager {
-    pub async fn statuses<'a>(
-        &self,
-        units: &'a Vec<String>,
-    ) -> impl Iterator<Item = (&'a str, Result<String>)> {
-        let statuses = units.iter().map(|unit| self.status(unit));
-        let statuses = join_all(statuses).await;
-        units.into_iter().map(|unit| unit.as_str()).zip(statuses)
-    }
+pub async fn statuses<'a>(
+    manager: &impl SystemdStatusManager,
+    units: &'a Vec<String>,
+) -> impl Iterator<Item = (&'a str, Result<String>)> {
+    let statuses = units.iter().map(|unit| manager.status(unit));
+    let statuses = join_all(statuses).await;
+    units.into_iter().map(|unit| unit.as_str()).zip(statuses)
 }
 
 pub struct SystemdStatusManagerImpl {
@@ -76,13 +74,12 @@ mod tests {
             }
         });
 
-        let mock: Box<dyn SystemdStatusManager> = Box::from(manager);
         let units = vec![
             String::from("active.service"),
             String::from("inactive.service"),
             String::from("invalid.service"),
         ];
-        let statuses: Vec<(&str, Result<String>)> = mock.statuses(&units).await.collect();
+        let statuses: Vec<(&str, Result<String>)> = statuses(&manager, &units).await.collect();
         assert_eq!(
             statuses,
             vec![

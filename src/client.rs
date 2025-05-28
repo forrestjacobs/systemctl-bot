@@ -54,7 +54,7 @@ impl CommandContext for Context<'_> {
 pub fn build_framework(
     guild_id: GuildId,
     command_type: CommandType,
-    status_monitor: Arc<dyn StatusMonitor>,
+    status_monitor: impl StatusMonitor,
     data: Arc<Data>,
 ) -> Framework<Arc<Data>, Error> {
     Framework::builder()

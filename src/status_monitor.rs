@@ -1,12 +1,12 @@
 use super::systemd_status::SystemdStatusManager;
-use crate::systemd_status::StatusStream;
+use crate::systemd_status::{statuses, StatusStream};
 use async_trait::async_trait;
 use futures::future::join_all;
 use futures::stream::{select_all, SelectAll};
 use futures::StreamExt;
 use poise::serenity_prelude::all::{ActivityData, Context};
+use std::any::Any;
 use std::pin::Pin;
-use std::{any::Any, sync::Arc};
 use zbus::Result;
 
 #[async_trait]
@@ -14,12 +14,12 @@ pub trait StatusMonitor: Any + Send + Sync {
     async fn monitor(&self, ctx: &Context);
 }
 
-pub struct StatusMonitorImpl {
+pub struct StatusMonitorImpl<M: SystemdStatusManager> {
     pub units: Vec<String>,
-    pub systemd_status_manager: Arc<dyn SystemdStatusManager>,
+    pub systemd_status_manager: M,
 }
 
-impl StatusMonitorImpl {
+impl<M: SystemdStatusManager> StatusMonitorImpl<M> {
     async fn update_activity_stream(&self) -> Result<SelectAll<Pin<Box<StatusStream>>>> {
         let streams = self
             .units
@@ -33,10 +33,8 @@ impl StatusMonitorImpl {
     }
 
     async fn get_activity(&self) -> Option<String> {
-        let active_units = self
-            .systemd_status_manager
-            .statuses(&self.units)
-            .await
+        let status_iter = statuses(&self.systemd_status_manager, &self.units).await;
+        let active_units = status_iter
             .filter(|(_, status)| status == &Ok(String::from("active")))
             .map(|(unit, _)| unit)
             .collect::<Vec<&str>>();
@@ -54,7 +52,7 @@ impl StatusMonitorImpl {
 }
 
 #[async_trait]
-impl StatusMonitor for StatusMonitorImpl {
+impl<M: SystemdStatusManager> StatusMonitor for StatusMonitorImpl<M> {
     async fn monitor(&self, ctx: &Context) {
         let mut stream = self.update_activity_stream().await.unwrap();
         let mut activity = self.get_activity().await;
@@ -102,7 +100,7 @@ mod tests {
             });
         let monitor = StatusMonitorImpl {
             units,
-            systemd_status_manager: Arc::from(manager),
+            systemd_status_manager: manager,
         };
         let mut stream = monitor.update_activity_stream().await.unwrap();
         tx.send("a.service".to_string()).unwrap();
@@ -132,7 +130,7 @@ mod tests {
         });
         let monitor = StatusMonitorImpl {
             units,
-            systemd_status_manager: Arc::from(manager),
+            systemd_status_manager: manager,
         };
         assert_eq!(
             monitor.get_activity().await,
