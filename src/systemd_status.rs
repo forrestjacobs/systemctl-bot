@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use futures::{future::join_all, Stream, StreamExt};
 use mockall::automock;
-use std::{any::Any, pin::Pin};
-use zbus::{dbus_proxy, Connection, Result};
+use std::{any::Any, pin::Pin, sync::Arc};
+use zbus::{Connection, Result};
+use zbus_systemd::systemd1::{ManagerProxy, UnitProxy};
 
 pub type StatusStream = dyn Stream<Item = String> + Send;
 
@@ -24,48 +25,36 @@ impl dyn SystemdStatusManager {
     }
 }
 
-#[dbus_proxy(
-    interface = "org.freedesktop.systemd1.Manager",
-    default_service = "org.freedesktop.systemd1",
-    default_path = "/org/freedesktop/systemd1"
-)]
-trait Manager {
-    #[dbus_proxy(object = "Unit")]
-    fn load_unit(&self, name: &str);
-}
-
-#[dbus_proxy(
-    interface = "org.freedesktop.systemd1.Unit",
-    default_service = "org.freedesktop.systemd1"
-)]
-trait Unit {
-    #[dbus_proxy(property)]
-    fn active_state(&self) -> Result<String>;
-}
-
 pub struct SystemdStatusManagerImpl {
+    conn: Arc<Connection>,
     client: ManagerProxy<'static>,
 }
 
 impl SystemdStatusManagerImpl {
     pub async fn build() -> Result<Self> {
-        let conn = Connection::system().await?;
+        let conn = Arc::from(Connection::system().await?);
         Ok(SystemdStatusManagerImpl {
-            client: ManagerProxy::new(&conn).await?,
+            conn: conn.clone(),
+            client: ManagerProxy::new(conn.as_ref()).await?,
         })
+    }
+
+    async fn load_unit(&self, name: &str) -> Result<UnitProxy<'static>> {
+        let path = self.client.load_unit(name.into()).await?;
+        UnitProxy::builder(self.conn.as_ref()).path(path)?.build().await
     }
 }
 
 #[async_trait]
 impl SystemdStatusManager for SystemdStatusManagerImpl {
     async fn status(&self, unit: &str) -> Result<String> {
-        let unit = self.client.load_unit(unit).await?;
+        let unit = self.load_unit(unit).await?;
         unit.active_state().await
     }
 
     async fn status_stream(&self, unit: &str) -> Result<Pin<Box<StatusStream>>> {
         let unit_name = unit.to_string();
-        let unit = self.client.load_unit(unit).await?;
+        let unit = self.load_unit(unit).await?;
         let stream = unit.receive_active_state_changed().await;
         Ok(Box::pin(stream.map(move |_| unit_name.clone())))
     }

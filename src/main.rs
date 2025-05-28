@@ -12,15 +12,12 @@ use status_monitor::StatusMonitorImpl;
 use std::sync::Arc;
 use systemctl::SystemctlImpl;
 use systemd_status::SystemdStatusManagerImpl;
-use tokio::spawn;
 
 async fn start() -> Result<()> {
-    let systemd_status_manager_handle = spawn(SystemdStatusManagerImpl::build());
-
     let config = Config::build()?;
     let units = Arc::from(config.units);
 
-    let systemd_status_manager = Arc::from(systemd_status_manager_handle.await??);
+    let systemd_status_manager = Arc::from(SystemdStatusManagerImpl::build().await?);
 
     let framework = build_framework(
         config.guild_id,

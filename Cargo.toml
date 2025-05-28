@@ -31,6 +31,10 @@ version = "1.18"
 features = ["process", "rt-multi-thread"]
 
 [dependencies.zbus]
-version = "3.2"
+version = "5.3"
 default-features = false
 features = ["tokio"]
+
+[dependencies.zbus_systemd]
+version = "0.25701"
+features = ["systemd1"]
