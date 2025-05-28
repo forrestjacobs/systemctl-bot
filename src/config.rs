@@ -10,7 +10,6 @@ use std::ops::Deref;
 pub enum Command {
     Start,
     Stop,
-    Status,
     Restart,
 }
 
@@ -20,7 +19,6 @@ impl TryFrom<&str> for Command {
         match value {
             "start" => Ok(Command::Start),
             "stop" => Ok(Command::Stop),
-            "status" => Ok(Command::Status),
             "restart" => Ok(Command::Restart),
             _ => Err(anyhow!("Could not parse command {}", value)),
         }
@@ -48,6 +46,12 @@ struct Unit {
     #[serde(deserialize_with = "deserialize_unit_name")]
     name: String,
     permissions: HashSet<UnitPermission>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct UnitSection {
+    pub command_units: UnitCollection,
+    pub status_units: Vec<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -85,7 +89,7 @@ pub struct Config {
     #[serde(default)]
     pub command_type: CommandType,
     #[serde(deserialize_with = "deserialize_units")]
-    pub units: UnitCollection,
+    pub units: UnitSection,
 }
 
 fn deserialize_unit_name<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -111,13 +115,13 @@ fn get_units_with_perms<const N: usize>(
         .collect()
 }
 
-fn deserialize_units<'de, D>(deserializer: D) -> Result<UnitCollection, D::Error>
+fn deserialize_units<'de, D>(deserializer: D) -> Result<UnitSection, D::Error>
 where
     D: Deserializer<'de>,
 {
     let units: Vec<Unit> = Vec::deserialize(deserializer)?;
     println!("{:?}", &units);
-    let units = HashMap::from([
+    let command_units = HashMap::from([
         (
             Command::Start,
             get_units_with_perms(&units, [UnitPermission::Start]),
@@ -130,12 +134,11 @@ where
             Command::Restart,
             get_units_with_perms(&units, [UnitPermission::Start, UnitPermission::Stop]),
         ),
-        (
-            Command::Status,
-            get_units_with_perms(&units, [UnitPermission::Status]),
-        ),
     ]);
-    Ok(UnitCollection::from(units))
+    Ok(UnitSection {
+        command_units: command_units.into(),
+        status_units: get_units_with_perms(&units, [UnitPermission::Status]),
+    })
 }
 
 #[derive(Parser, Debug)]
@@ -165,7 +168,6 @@ mod tests {
     fn command_from_string() {
         assert_eq!(Command::try_from("start").ok(), Some(Command::Start));
         assert_eq!(Command::try_from("stop").ok(), Some(Command::Stop));
-        assert_eq!(Command::try_from("status").ok(), Some(Command::Status));
         assert_eq!(Command::try_from("restart").ok(), Some(Command::Restart));
         assert_eq!(
             Command::try_from("random").map_err(|e| e.to_string()),
@@ -230,18 +232,17 @@ mod tests {
                 discord_token: String::from("88888888.88888888.88888888"),
                 guild_id: GuildId::new(4444),
                 command_type: CommandType::Multiple,
-                units: UnitCollection(HashMap::from([
-                    (
-                        Command::Start,
-                        vec![all.clone(), String::from("start.service")],
-                    ),
-                    (Command::Stop, vec![all.clone()],),
-                    (Command::Restart, vec![all.clone()],),
-                    (
-                        Command::Status,
-                        vec![all.clone(), String::from("status.service")],
-                    ),
-                ])),
+                units: UnitSection {
+                    command_units: UnitCollection(HashMap::from([
+                        (
+                            Command::Start,
+                            vec![all.clone(), String::from("start.service")],
+                        ),
+                        (Command::Stop, vec![all.clone()]),
+                        (Command::Restart, vec![all.clone()]),
+                    ])),
+                    status_units: vec![all.clone(), String::from("status.service")],
+                },
             }
         );
     }

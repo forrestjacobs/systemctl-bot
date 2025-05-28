@@ -84,43 +84,6 @@ pub async fn restart(
     restart_inner(ctx, unit).await
 }
 
-async fn status_inner(ctx: impl CommandContext, unit: Option<String>) -> Result<()> {
-    ctx.defer_response().await?;
-    let systemd_status_manager = ctx.get_systemd_status_manager();
-    let response = match unit {
-        Some(unit) => {
-            ctx.get_units().ensure_allowed(&unit, Command::Status)?;
-            systemd_status_manager.status(&unit).await?
-        }
-        None => {
-            let lines = systemd_status_manager
-                .statuses(&ctx.get_units()[&Command::Status])
-                .await
-                .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
-                .filter(|(_, status)| status != "inactive")
-                .map(|(unit, status)| format!("{}: {}", unit, status))
-                .collect::<Vec<String>>();
-            if lines.is_empty() {
-                String::from("Nothing is active")
-            } else {
-                lines.join("\n")
-            }
-        }
-    };
-    ctx.respond(response).await
-}
-
-/// Checks units' status
-#[command(slash_command)]
-pub async fn status(
-    ctx: Context<'_>,
-    #[description = "The unit to check"]
-    #[autocomplete = "autocomplete_units"]
-    unit: Option<String>,
-) -> Result<()> {
-    status_inner(ctx, unit).await
-}
-
 pub fn get_commands(
     command_type: CommandType,
     units: &UnitCollection,
@@ -134,9 +97,6 @@ pub fn get_commands(
     }
     if !units[&Command::Restart].is_empty() {
         commands.push(restart());
-    }
-    if !units[&Command::Status].is_empty() {
-        commands.push(status());
     }
 
     match command_type {
@@ -152,20 +112,17 @@ pub fn get_commands(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        client::MockCommandContext, config::UnitCollection, systemctl::MockSystemctl,
-        systemd_status::MockSystemdStatusManager,
-    };
+    use crate::{client::MockCommandContext, config::UnitCollection, systemctl::MockSystemctl};
     use anyhow::bail;
     use mockall::predicate;
     use std::collections::HashMap;
 
     fn mock_units(ctx: &mut MockCommandContext, command: Command, units: &[&str]) {
         ctx.expect_get_units()
-            .return_const(Arc::from(UnitCollection::from(HashMap::from([(
+            .return_const(UnitCollection::from(HashMap::from([(
                 command,
                 units.into_iter().map(|unit| unit.to_string()).collect(),
-            )]))));
+            )])));
     }
 
     fn disallow_systemctl_run(ctx: &mut MockCommandContext) {
@@ -186,30 +143,6 @@ mod tests {
                 .returning(move |_| if is_ok { Ok(()) } else { bail!("Run error") });
             Arc::from(systemctl)
         });
-    }
-
-    fn disallow_systemctl_status(ctx: &mut MockCommandContext) {
-        ctx.expect_get_systemd_status_manager().return_once(|| {
-            let mut manager = MockSystemdStatusManager::new();
-            manager.expect_status().never();
-            manager.expect_status_stream().never();
-            Arc::from(manager)
-        });
-    }
-
-    fn mock_status<'a>(ctx: &'a mut MockCommandContext) {
-        ctx.expect_get_systemd_status_manager()
-            .return_once(move || {
-                let mut manager = MockSystemdStatusManager::new();
-                manager.expect_status().returning(|unit| {
-                    if unit == "invalid.service" {
-                        Err(zbus::Error::InvalidReply)
-                    } else {
-                        Ok(unit.strip_suffix(".service").unwrap_or(unit).into())
-                    }
-                });
-                Arc::from(manager)
-            });
     }
 
     fn mock_respond(ctx: &mut MockCommandContext, response: &str, is_ok: bool) {
@@ -468,157 +401,6 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn single_status_fails_on_defer() {
-        let mut ctx = MockCommandContext::new();
-        ctx.expect_defer_response()
-            .returning(|| bail!("Defer error"));
-        disallow_systemctl_status(&mut ctx);
-        assert_eq!(
-            status_inner(ctx, Some("active.service".to_string()))
-                .await
-                .map_err(|e| e.to_string()),
-            Err("Defer error".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn single_status_missing_permissions() {
-        let mut ctx = MockCommandContext::new();
-        ctx.expect_defer_response().returning(|| Ok(()));
-        mock_units(&mut ctx, Command::Status, &[]);
-        disallow_systemctl_status(&mut ctx);
-        assert_eq!(
-            status_inner(ctx, Some("active.service".to_string()))
-                .await
-                .map_err(|e| e.to_string()),
-            Err("Command is not allowed".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn single_status_fails_on_run() {
-        let mut ctx = MockCommandContext::new();
-        ctx.expect_defer_response().returning(|| Ok(()));
-        mock_units(&mut ctx, Command::Status, &["invalid.service"]);
-        mock_status(&mut ctx);
-        assert_eq!(
-            status_inner(ctx, Some("invalid.service".to_string()))
-                .await
-                .map_err(|e| e.to_string()),
-            Err("Invalid D-Bus method reply".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn single_status_fails_on_respond() {
-        let mut ctx = MockCommandContext::new();
-        ctx.expect_defer_response().returning(|| Ok(()));
-        mock_units(&mut ctx, Command::Status, &["active.service"]);
-        mock_status(&mut ctx);
-        mock_respond(&mut ctx, "active", false);
-        assert_eq!(
-            status_inner(ctx, Some("active.service".to_string()))
-                .await
-                .map_err(|e| e.to_string()),
-            Err("Response error".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn single_status() {
-        let mut ctx = MockCommandContext::new();
-        ctx.expect_defer_response().returning(|| Ok(()));
-        mock_units(&mut ctx, Command::Status, &["active.service"]);
-        mock_status(&mut ctx);
-        mock_respond(&mut ctx, "active", true);
-        assert_eq!(
-            status_inner(ctx, Some("active.service".to_string()))
-                .await
-                .ok(),
-            Some(())
-        );
-    }
-
-    #[tokio::test]
-    async fn multiple_status_fails_on_defer() {
-        let mut ctx = MockCommandContext::new();
-        ctx.expect_defer_response()
-            .returning(|| bail!("Defer error"));
-        disallow_systemctl_status(&mut ctx);
-        assert_eq!(
-            status_inner(ctx, None).await.map_err(|e| e.to_string()),
-            Err("Defer error".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn multiple_status_fails_on_respond() {
-        let mut ctx = MockCommandContext::new();
-        ctx.expect_defer_response().returning(|| Ok(()));
-        mock_units(
-            &mut ctx,
-            Command::Status,
-            &["active.service", "activating.service", "inactive.service"],
-        );
-        mock_status(&mut ctx);
-        mock_respond(
-            &mut ctx,
-            "active.service: active\nactivating.service: activating",
-            false,
-        );
-        assert_eq!(
-            status_inner(ctx, None).await.map_err(|e| e.to_string()),
-            Err("Response error".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn multiple_status() {
-        let mut ctx = MockCommandContext::new();
-        ctx.expect_defer_response().returning(|| Ok(()));
-        mock_units(
-            &mut ctx,
-            Command::Status,
-            &["active.service", "activating.service", "inactive.service"],
-        );
-        mock_status(&mut ctx);
-        mock_respond(
-            &mut ctx,
-            "active.service: active\nactivating.service: activating",
-            true,
-        );
-        assert_eq!(status_inner(ctx, None).await.ok(), Some(()));
-    }
-
-    #[tokio::test]
-    async fn multiple_status_with_errant_status() {
-        let mut ctx = MockCommandContext::new();
-        ctx.expect_defer_response().returning(|| Ok(()));
-        mock_units(
-            &mut ctx,
-            Command::Status,
-            &["active.service", "invalid.service"],
-        );
-        mock_status(&mut ctx);
-        mock_respond(
-            &mut ctx,
-            "active.service: active\ninvalid.service: Invalid D-Bus method reply",
-            true,
-        );
-        assert_eq!(status_inner(ctx, None).await.ok(), Some(()));
-    }
-
-    #[tokio::test]
-    async fn multiple_status_none_active() {
-        let mut ctx = MockCommandContext::new();
-        ctx.expect_defer_response().returning(|| Ok(()));
-        mock_units(&mut ctx, Command::Status, &["inactive.service"]);
-        mock_status(&mut ctx);
-        mock_respond(&mut ctx, "Nothing is active", true);
-        assert_eq!(status_inner(ctx, None).await.ok(), Some(()));
-    }
-
     #[test]
     fn get_multiple_commands() {
         let service = "test.service".to_string();
@@ -626,11 +408,10 @@ mod tests {
             (Command::Start, vec![service.clone()]),
             (Command::Stop, vec![service.clone()]),
             (Command::Restart, vec![service.clone()]),
-            (Command::Status, vec![service.clone()]),
         ]));
         assert_eq!(
             to_names(&get_commands(CommandType::Multiple, &unit)),
-            vec!["start", "stop", "restart", "status"]
+            vec!["start", "stop", "restart"]
         );
     }
 
@@ -641,13 +422,12 @@ mod tests {
             (Command::Start, vec![service.clone()]),
             (Command::Stop, vec![service.clone()]),
             (Command::Restart, vec![service.clone()]),
-            (Command::Status, vec![service.clone()]),
         ]));
         let commands = get_commands(CommandType::Single, &unit);
         assert_eq!(to_names(&commands), vec!["systemctl"]);
         assert_eq!(
             to_names(&commands[0].subcommands),
-            vec!["start", "stop", "restart", "status"]
+            vec!["start", "stop", "restart"]
         );
     }
 }

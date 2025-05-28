@@ -1,5 +1,4 @@
 use super::systemd_status::SystemdStatusManager;
-use crate::config::{Command, UnitCollection};
 use crate::systemd_status::StatusStream;
 use async_trait::async_trait;
 use futures::future::join_all;
@@ -16,13 +15,14 @@ pub trait StatusMonitor: Any + Send + Sync {
 }
 
 pub struct StatusMonitorImpl {
-    pub units: Arc<UnitCollection>,
+    pub units: Vec<String>,
     pub systemd_status_manager: Arc<dyn SystemdStatusManager>,
 }
 
 impl StatusMonitorImpl {
     async fn update_activity_stream(&self) -> Result<SelectAll<Pin<Box<StatusStream>>>> {
-        let streams = self.units[&Command::Status]
+        let streams = self
+            .units
             .iter()
             .map(|u| self.systemd_status_manager.status_stream(u));
         let streams = join_all(streams).await;
@@ -35,7 +35,7 @@ impl StatusMonitorImpl {
     async fn get_activity(&self) -> Option<String> {
         let active_units = self
             .systemd_status_manager
-            .statuses(&self.units[&Command::Status])
+            .statuses(&self.units)
             .await
             .filter(|(_, status)| status == &Ok(String::from("active")))
             .map(|(unit, _)| unit)
@@ -74,19 +74,15 @@ impl StatusMonitor for StatusMonitorImpl {
 mod tests {
     use super::*;
     use crate::systemd_status::MockSystemdStatusManager;
-    use std::collections::HashMap;
     use tokio::sync::broadcast;
 
     #[tokio::test]
     async fn test_update_activity_stream() {
-        let units = Arc::from(UnitCollection::from(HashMap::from([(
-            Command::Status,
-            vec![
-                "a.service".to_string(),
-                "b.service".to_string(),
-                "c.service".to_string(),
-            ],
-        )])));
+        let units = vec![
+            "a.service".to_string(),
+            "b.service".to_string(),
+            "c.service".to_string(),
+        ];
 
         let (tx, rx) = broadcast::channel::<String>(4);
         let mut manager = MockSystemdStatusManager::new();
@@ -121,14 +117,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_activity() {
-        let units = Arc::from(UnitCollection::from(HashMap::from([(
-            Command::Status,
-            vec![
-                "inactive.service".to_string(),
-                "active.service".to_string(),
-                "invalid.service".to_string(),
-            ],
-        )])));
+        let units = vec![
+            "inactive.service".to_string(),
+            "active.service".to_string(),
+            "invalid.service".to_string(),
+        ];
         let mut manager = MockSystemdStatusManager::new();
         manager.expect_status().returning(|unit| {
             if unit == "invalid.service" {
