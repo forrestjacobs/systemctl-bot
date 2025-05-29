@@ -24,7 +24,7 @@ async fn start() -> Result<()> {
         },
         Arc::from(Data {
             units: config.units.command_units,
-            systemd: systemd,
+            systemd,
         }),
     );
 

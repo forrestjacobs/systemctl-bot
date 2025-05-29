@@ -68,7 +68,6 @@ impl SystemdManager for SystemdManagerImpl {
                 };
             }
         }
-        // TODO: Different error
         bail!("Job stream closed")
     }
 

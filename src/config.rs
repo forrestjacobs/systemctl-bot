@@ -104,7 +104,7 @@ where
 }
 
 fn get_units_with_perms<const N: usize>(
-    units: &Vec<Unit>,
+    units: &[Unit],
     perms: [UnitPermission; N],
 ) -> Vec<String> {
     let perms = HashSet::from(perms);

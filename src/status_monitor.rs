@@ -40,7 +40,7 @@ impl StatusMonitorImpl {
         let mut is_active_by_unit = HashMap::new();
         Ok(Box::pin(stream! {
             while let Some((unit, status)) = streams.next().await {
-                let is_active = status.map_or(false, |v| v == "active");
+                let is_active = status.is_ok_and(|v| v == "active");
                 if is_active_by_unit.insert(unit, is_active) == Some(is_active) {
                     continue;
                 }
