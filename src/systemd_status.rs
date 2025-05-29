@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use async_stream::stream;
+use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use mockall::automock;
 use std::{any::Any, pin::Pin, sync::Arc};
@@ -11,7 +11,7 @@ pub type StatusStream = dyn Stream<Item = Result<String>> + Send;
 #[automock]
 #[async_trait]
 pub trait SystemdStatusManager: Any + Sync + Send {
-    async fn status_stream(&self, unit: &str) -> Result<Pin<Box<StatusStream>>>;
+    async fn active_state_stream(&self, unit: &str) -> Result<Pin<Box<StatusStream>>>;
 }
 
 pub struct SystemdStatusManagerImpl {
@@ -31,10 +31,9 @@ impl SystemdStatusManagerImpl {
 
 #[async_trait]
 impl SystemdStatusManager for SystemdStatusManagerImpl {
-    async fn status_stream(&self, unit: &str) -> Result<Pin<Box<StatusStream>>> {
-        let unit_name = unit.to_string();
-        let path = self.client.load_unit(unit_name.clone()).await?;
-        let unit: UnitProxy<'static> = UnitProxy::builder(self.conn.as_ref())
+    async fn active_state_stream(&self, unit: &str) -> Result<Pin<Box<StatusStream>>> {
+        let path = self.client.load_unit(unit.to_string()).await?;
+        let unit = UnitProxy::builder(self.conn.as_ref())
             .path(path)?
             .build()
             .await?;
