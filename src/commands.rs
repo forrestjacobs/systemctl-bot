@@ -1,5 +1,6 @@
 use crate::client::{CommandContext, Context, Data};
 use crate::config::{Command, CommandType, UnitCollection};
+use crate::systemd::UnitVerb;
 use anyhow::Result;
 use poise::command;
 use poise::serenity_prelude::AutocompleteChoice;
@@ -33,7 +34,7 @@ async fn autocomplete_units<'a>(ctx: Context<'a>, partial: &'a str) -> Vec<Autoc
 async fn start_inner(ctx: impl CommandContext, unit: String) -> Result<()> {
     ctx.defer_response().await?;
     ctx.get_units().ensure_allowed(&unit, Command::Start)?;
-    ctx.get_systemctl().run(&["start", &unit]).await?;
+    ctx.get_systemd().run(UnitVerb::Start, &unit).await?;
     ctx.respond(format!("Started {}", unit)).await
 }
 
@@ -51,7 +52,7 @@ pub async fn start(
 async fn stop_inner(ctx: impl CommandContext, unit: String) -> Result<()> {
     ctx.defer_response().await?;
     ctx.get_units().ensure_allowed(&unit, Command::Stop)?;
-    ctx.get_systemctl().run(&["stop", &unit]).await?;
+    ctx.get_systemd().run(UnitVerb::Stop, &unit).await?;
     ctx.respond(format!("Stopped {}", unit)).await
 }
 
@@ -69,7 +70,7 @@ pub async fn stop(
 async fn restart_inner(ctx: impl CommandContext, unit: String) -> Result<()> {
     ctx.defer_response().await?;
     ctx.get_units().ensure_allowed(&unit, Command::Restart)?;
-    ctx.get_systemctl().run(&["restart", &unit]).await?;
+    ctx.get_systemd().run(UnitVerb::Restart, &unit).await?;
     ctx.respond(format!("Restarted {}", unit)).await
 }
 
@@ -112,7 +113,7 @@ pub fn get_commands(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{client::MockCommandContext, config::UnitCollection, systemctl::MockSystemctl};
+    use crate::{client::MockCommandContext, config::UnitCollection, systemd::{MockSystemdManager, UnitVerb}};
     use anyhow::bail;
     use mockall::predicate;
     use std::collections::HashMap;
@@ -125,22 +126,22 @@ mod tests {
             )])));
     }
 
-    fn disallow_systemctl_run(ctx: &mut MockCommandContext) {
-        ctx.expect_get_systemctl().return_once(|| {
-            let mut systemctl = MockSystemctl::new();
+    fn disallow_systemd_run(ctx: &mut MockCommandContext) {
+        ctx.expect_get_systemd().return_once(|| {
+            let mut systemctl = MockSystemdManager::new();
             systemctl.expect_run().never();
             Arc::from(systemctl)
         });
     }
 
-    fn mock_systemctl_run(ctx: &mut MockCommandContext, args: &[&str], is_ok: bool) {
-        let args: Vec<String> = args.into_iter().map(|arg| arg.to_string()).collect();
-        ctx.expect_get_systemctl().return_once(move || {
-            let mut systemctl = MockSystemctl::new();
+    fn mock_systemctl_run(ctx: &mut MockCommandContext, verb: UnitVerb, unit: &str, is_ok: bool) {
+        let unit = unit.to_string();
+        ctx.expect_get_systemd().return_once(move || {
+            let mut systemctl = MockSystemdManager::new();
             systemctl
                 .expect_run()
-                .with(predicate::eq(args))
-                .returning(move |_| if is_ok { Ok(()) } else { bail!("Run error") });
+                .with(predicate::eq(verb), predicate::eq(unit))
+                .returning(move |_,_| if is_ok { Ok(()) } else { bail!("Run error") });
             Arc::from(systemctl)
         });
     }
@@ -194,7 +195,7 @@ mod tests {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response()
             .returning(|| bail!("Defer error"));
-        disallow_systemctl_run(&mut ctx);
+        disallow_systemd_run(&mut ctx);
         assert_eq!(
             start_inner(ctx, "startable.service".to_string())
                 .await
@@ -208,7 +209,7 @@ mod tests {
         let mut ctx: MockCommandContext = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
         mock_units(&mut ctx, Command::Start, &[]);
-        disallow_systemctl_run(&mut ctx);
+        disallow_systemd_run(&mut ctx);
         assert_eq!(
             start_inner(ctx, "startable.service".to_string())
                 .await
@@ -222,7 +223,7 @@ mod tests {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
         mock_units(&mut ctx, Command::Start, &["startable.service"]);
-        mock_systemctl_run(&mut ctx, &["start", "startable.service"], false);
+        mock_systemctl_run(&mut ctx, UnitVerb::Start, "startable.service", false);
         assert_eq!(
             start_inner(ctx, "startable.service".to_string())
                 .await
@@ -236,7 +237,7 @@ mod tests {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
         mock_units(&mut ctx, Command::Start, &["startable.service"]);
-        mock_systemctl_run(&mut ctx, &["start", "startable.service"], true);
+        mock_systemctl_run(&mut ctx, UnitVerb::Start, "startable.service", true);
         mock_respond(&mut ctx, "Started startable.service", false);
         assert_eq!(
             start_inner(ctx, "startable.service".to_string())
@@ -251,7 +252,7 @@ mod tests {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
         mock_units(&mut ctx, Command::Start, &["startable.service"]);
-        mock_systemctl_run(&mut ctx, &["start", "startable.service"], true);
+        mock_systemctl_run(&mut ctx, UnitVerb::Start, "startable.service", true);
         mock_respond(&mut ctx, "Started startable.service", true);
         assert_eq!(
             start_inner(ctx, "startable.service".to_string()).await.ok(),
@@ -264,7 +265,7 @@ mod tests {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response()
             .returning(|| bail!("Defer error"));
-        disallow_systemctl_run(&mut ctx);
+        disallow_systemd_run(&mut ctx);
         assert_eq!(
             stop_inner(ctx, "stoppable.service".to_string())
                 .await
@@ -278,7 +279,7 @@ mod tests {
         let mut ctx: MockCommandContext = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
         mock_units(&mut ctx, Command::Stop, &[]);
-        disallow_systemctl_run(&mut ctx);
+        disallow_systemd_run(&mut ctx);
         assert_eq!(
             stop_inner(ctx, "stoppable.service".to_string())
                 .await
@@ -292,7 +293,7 @@ mod tests {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
         mock_units(&mut ctx, Command::Stop, &["stoppable.service"]);
-        mock_systemctl_run(&mut ctx, &["stop", "stoppable.service"], false);
+        mock_systemctl_run(&mut ctx, UnitVerb::Stop, "stoppable.service", false);
         assert_eq!(
             stop_inner(ctx, "stoppable.service".to_string())
                 .await
@@ -306,7 +307,7 @@ mod tests {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
         mock_units(&mut ctx, Command::Stop, &["stoppable.service"]);
-        mock_systemctl_run(&mut ctx, &["stop", "stoppable.service"], true);
+        mock_systemctl_run(&mut ctx, UnitVerb::Stop, "stoppable.service", true);
         mock_respond(&mut ctx, "Stopped stoppable.service", false);
         assert_eq!(
             stop_inner(ctx, "stoppable.service".to_string())
@@ -321,7 +322,7 @@ mod tests {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
         mock_units(&mut ctx, Command::Stop, &["stoppable.service"]);
-        mock_systemctl_run(&mut ctx, &["stop", "stoppable.service"], true);
+        mock_systemctl_run(&mut ctx, UnitVerb::Stop, "stoppable.service", true);
         mock_respond(&mut ctx, "Stopped stoppable.service", true);
         assert_eq!(
             stop_inner(ctx, "stoppable.service".to_string()).await.ok(),
@@ -334,7 +335,7 @@ mod tests {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response()
             .returning(|| bail!("Defer error"));
-        disallow_systemctl_run(&mut ctx);
+        disallow_systemd_run(&mut ctx);
         assert_eq!(
             restart_inner(ctx, "restartable.service".to_string())
                 .await
@@ -348,7 +349,7 @@ mod tests {
         let mut ctx: MockCommandContext = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
         mock_units(&mut ctx, Command::Restart, &[]);
-        disallow_systemctl_run(&mut ctx);
+        disallow_systemd_run(&mut ctx);
         assert_eq!(
             restart_inner(ctx, "restartable.service".to_string())
                 .await
@@ -362,7 +363,7 @@ mod tests {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
         mock_units(&mut ctx, Command::Restart, &["restartable.service"]);
-        mock_systemctl_run(&mut ctx, &["restart", "restartable.service"], false);
+        mock_systemctl_run(&mut ctx, UnitVerb::Restart, "restartable.service", false);
         assert_eq!(
             restart_inner(ctx, "restartable.service".to_string())
                 .await
@@ -376,7 +377,7 @@ mod tests {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
         mock_units(&mut ctx, Command::Restart, &["restartable.service"]);
-        mock_systemctl_run(&mut ctx, &["restart", "restartable.service"], true);
+        mock_systemctl_run(&mut ctx, UnitVerb::Restart, "restartable.service", true);
         mock_respond(&mut ctx, "Restarted restartable.service", false);
         assert_eq!(
             restart_inner(ctx, "restartable.service".to_string())
@@ -391,7 +392,7 @@ mod tests {
         let mut ctx = MockCommandContext::new();
         ctx.expect_defer_response().returning(|| Ok(()));
         mock_units(&mut ctx, Command::Restart, &["restartable.service"]);
-        mock_systemctl_run(&mut ctx, &["restart", "restartable.service"], true);
+        mock_systemctl_run(&mut ctx, UnitVerb::Restart, "restartable.service", true);
         mock_respond(&mut ctx, "Restarted restartable.service", true);
         assert_eq!(
             restart_inner(ctx, "restartable.service".to_string())

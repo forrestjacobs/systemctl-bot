@@ -2,7 +2,7 @@ use crate::{
     commands::get_commands,
     config::{CommandType, UnitCollection},
     status_monitor::StatusMonitor,
-    systemctl::Systemctl,
+    systemd::SystemdManager,
 };
 use anyhow::Error;
 use anyhow::Result;
@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 pub struct Data {
     pub units: UnitCollection,
-    pub systemctl: Arc<dyn Systemctl>,
+    pub systemd: Arc<dyn SystemdManager>,
 }
 
 pub type Context<'a> = poise::Context<'a, Arc<Data>, Error>;
@@ -25,7 +25,7 @@ pub trait CommandContext {
 
     fn get_command_name(&self) -> &str;
     fn get_units(&self) -> &UnitCollection;
-    fn get_systemctl(&self) -> Arc<dyn Systemctl>;
+    fn get_systemd(&self) -> Arc<dyn SystemdManager>;
 }
 
 impl CommandContext for Context<'_> {
@@ -46,8 +46,8 @@ impl CommandContext for Context<'_> {
     fn get_units(&self) -> &UnitCollection {
         &self.data().units
     }
-    fn get_systemctl(&self) -> Arc<dyn Systemctl> {
-        self.data().systemctl.clone()
+    fn get_systemd(&self) -> Arc<dyn SystemdManager> {
+        self.data().systemd.clone()
     }
 }
 

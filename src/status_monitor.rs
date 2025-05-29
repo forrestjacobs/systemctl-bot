@@ -1,5 +1,5 @@
-use super::systemd_status::SystemdStatusManager;
-use crate::systemd_status::StatusStream;
+use super::systemd::SystemdManager;
+use crate::systemd::StatusStream;
 use async_stream::stream;
 use async_trait::async_trait;
 use futures::future::join_all;
@@ -8,27 +8,28 @@ use poise::serenity_prelude::all::{ActivityData, Context};
 use std::any::Any;
 use std::collections::HashMap;
 use std::pin::Pin;
+use std::sync::Arc;
 use tokio_stream::StreamMap;
-use zbus::Result;
+use anyhow::Result;
 
 #[async_trait]
 pub trait StatusMonitor: Any + Send + Sync {
     async fn monitor(&self, ctx: &Context);
 }
 
-pub struct StatusMonitorImpl<M: SystemdStatusManager> {
+pub struct StatusMonitorImpl {
     pub units: Vec<String>,
-    pub systemd_status_manager: M,
+    pub systemd: Arc<dyn SystemdManager>,
 }
 
-impl<M: SystemdStatusManager> StatusMonitorImpl<M> {
+impl StatusMonitorImpl {
     async fn get_stream(
         &self,
-    ) -> Result<Pin<Box<impl Stream<Item = Option<String>> + use<'_, M>>>> {
+    ) -> Result<Pin<Box<impl Stream<Item = Option<String>> + use<'_>>>> {
         let streams = self
             .units
             .iter()
-            .map(|u| self.systemd_status_manager.active_state_stream(u));
+            .map(|u| self.systemd.active_state_stream(u));
         let streams = join_all(streams)
             .await
             .into_iter()
@@ -61,7 +62,7 @@ impl<M: SystemdStatusManager> StatusMonitorImpl<M> {
 }
 
 #[async_trait]
-impl<M: SystemdStatusManager> StatusMonitor for StatusMonitorImpl<M> {
+impl StatusMonitor for StatusMonitorImpl {
     async fn monitor(&self, ctx: &Context) {
         let mut stream = self.get_stream().await.unwrap();
         while let Some(status) = stream.next().await {
@@ -73,18 +74,18 @@ impl<M: SystemdStatusManager> StatusMonitor for StatusMonitorImpl<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::systemd_status::MockSystemdStatusManager;
+    use crate::systemd::MockSystemdManager;
     use tokio::sync::broadcast;
 
     #[tokio::test]
     async fn test_update_activity_stream() {
         let units = vec!["a.service", "b.service"];
 
-        let (tx, rx) = broadcast::channel::<(&str, &str)>(4);
-        let mut manager = MockSystemdStatusManager::new();
+        let (tx, rx) = broadcast::channel::<(&str, &str)>(3);
+        let mut manager = MockSystemdManager::new();
         manager
             .expect_active_state_stream()
-            .times(3)
+            .times(2)
             .returning(move |unit| {
                 let unit = unit.to_string();
                 let mut rx = rx.resubscribe();
@@ -99,7 +100,7 @@ mod tests {
             });
         let monitor = StatusMonitorImpl {
             units: units.iter().map(|s| s.to_string()).collect(),
-            systemd_status_manager: manager,
+            systemd: Arc::from(manager),
         };
         let mut stream = monitor.get_stream().await.unwrap();
         tx.send(("a.service", "active")).unwrap();
@@ -110,6 +111,6 @@ mod tests {
             Some("a.service, b.service".to_string())
         );
         tx.send(("a.service", "deactivating")).unwrap();
-        assert_eq!(stream.next().await.unwrap(), Some("c.service".to_string()));
+        assert_eq!(stream.next().await.unwrap(), Some("b.service".to_string()));
     }
 }
