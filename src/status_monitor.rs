@@ -1,12 +1,14 @@
 use super::systemd_status::SystemdStatusManager;
-use crate::systemd_status::{statuses, StatusStream};
+use crate::systemd_status::StatusStream;
+use async_stream::stream;
 use async_trait::async_trait;
 use futures::future::join_all;
-use futures::stream::{select_all, SelectAll};
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use poise::serenity_prelude::all::{ActivityData, Context};
 use std::any::Any;
+use std::collections::HashMap;
 use std::pin::Pin;
+use tokio_stream::StreamMap;
 use zbus::Result;
 
 #[async_trait]
@@ -20,50 +22,50 @@ pub struct StatusMonitorImpl<M: SystemdStatusManager> {
 }
 
 impl<M: SystemdStatusManager> StatusMonitorImpl<M> {
-    async fn update_activity_stream(&self) -> Result<SelectAll<Pin<Box<StatusStream>>>> {
-        let streams = self
+    async fn get_stream(
+        &self,
+    ) -> Result<Pin<Box<impl Stream<Item = Option<String>> + use<'_, M>>>> {
+        let status_streams = self
             .units
             .iter()
             .map(|u| self.systemd_status_manager.status_stream(u));
-        let streams = join_all(streams).await;
-        let streams = streams
+        let status_streams = join_all(status_streams)
+            .await
             .into_iter()
             .collect::<Result<Vec<Pin<Box<StatusStream>>>>>()?;
-        Ok(select_all(streams))
-    }
+        let mut status_streams =
+            StreamMap::from_iter(self.units.iter().map(String::as_str).zip(status_streams));
 
-    async fn get_activity(&self) -> Option<String> {
-        let status_iter = statuses(&self.systemd_status_manager, &self.units).await;
-        let active_units = status_iter
-            .filter(|(_, status)| status == &Ok(String::from("active")))
-            .map(|(unit, _)| unit)
-            .collect::<Vec<&str>>();
+        let mut is_active_by_unit = HashMap::new();
+        Ok(Box::pin(stream! {
+            while let Some((unit, status)) = status_streams.next().await {
+                let is_active = status.map_or(false, |v| v == "active");
+                if is_active_by_unit.insert(unit, is_active) == Some(is_active) {
+                    continue;
+                }
 
-        if active_units.is_empty() {
-            None
-        } else {
-            Some(active_units.join(", "))
-        }
-    }
+                let active_units: Vec<&str> = self.units
+                    .iter()
+                    .filter(|unit| *is_active_by_unit.get(unit.as_str()).unwrap_or(&false))
+                    .map(String::as_str)
+                    .collect();
 
-    fn set_activity(ctx: &Context, value: &Option<String>) {
-        ctx.set_activity(value.as_ref().map(ActivityData::playing))
+                yield if active_units.is_empty() {
+                    None
+                } else {
+                    Some(active_units.join(", "))
+                };
+            }
+        }))
     }
 }
 
 #[async_trait]
 impl<M: SystemdStatusManager> StatusMonitor for StatusMonitorImpl<M> {
     async fn monitor(&self, ctx: &Context) {
-        let mut stream = self.update_activity_stream().await.unwrap();
-        let mut activity = self.get_activity().await;
-        Self::set_activity(ctx, &activity);
-        while stream.next().await.is_some() {
-            let updated_activity = self.get_activity().await;
-            if activity == updated_activity {
-                continue;
-            }
-            activity = updated_activity;
-            Self::set_activity(ctx, &activity);
+        let mut stream = self.get_stream().await.unwrap();
+        while let Some(status) = stream.next().await {
+            ctx.set_activity(status.map(ActivityData::playing));
         }
     }
 }
@@ -72,6 +74,7 @@ impl<M: SystemdStatusManager> StatusMonitor for StatusMonitorImpl<M> {
 mod tests {
     use super::*;
     use crate::systemd_status::MockSystemdStatusManager;
+    use async_stream::stream;
     use tokio::sync::broadcast;
 
     #[tokio::test]
@@ -82,7 +85,7 @@ mod tests {
             "c.service".to_string(),
         ];
 
-        let (tx, rx) = broadcast::channel::<String>(4);
+        let (tx, rx) = broadcast::channel::<(String, String)>(4);
         let mut manager = MockSystemdStatusManager::new();
         manager
             .expect_status_stream()
@@ -90,51 +93,26 @@ mod tests {
             .returning(move |unit| {
                 let unit = unit.to_string();
                 let mut rx = rx.resubscribe();
-                Ok(Box::pin(futures::stream::once(async move {
+                Ok(Box::pin(stream! {
                     loop {
-                        if rx.recv().await.map_or(false, |u| &u == &unit) {
-                            return unit;
+                        let (target, status) = rx.recv().await.unwrap();
+                        if target == unit {
+                            yield Ok(status)
                         }
                     }
-                })))
+                }))
             });
         let monitor = StatusMonitorImpl {
             units,
             systemd_status_manager: manager,
         };
-        let mut stream = monitor.update_activity_stream().await.unwrap();
-        tx.send("a.service".to_string()).unwrap();
-        assert_eq!(stream.next().await, Some("a.service".to_string()));
-        tx.send("c.service".to_string()).unwrap();
-        assert_eq!(stream.next().await, Some("c.service".to_string()));
-        tx.send("b.service".to_string()).unwrap();
-        assert_eq!(stream.next().await, Some("b.service".to_string()));
-        tx.send("z.service".to_string()).unwrap();
-        assert_eq!(stream.next().await, None);
-    }
-
-    #[tokio::test]
-    async fn test_update_activity() {
-        let units = vec![
-            "inactive.service".to_string(),
-            "active.service".to_string(),
-            "invalid.service".to_string(),
-        ];
-        let mut manager = MockSystemdStatusManager::new();
-        manager.expect_status().returning(|unit| {
-            if unit == "invalid.service" {
-                Err(zbus::Error::InvalidReply)
-            } else {
-                Ok(unit.strip_suffix(".service").unwrap_or(unit).into())
-            }
-        });
-        let monitor = StatusMonitorImpl {
-            units,
-            systemd_status_manager: manager,
-        };
-        assert_eq!(
-            monitor.get_activity().await,
-            Some("active.service".to_string())
-        );
+        let mut stream = monitor.get_stream().await.unwrap();
+        tx.send(("a.service".to_string(), "active".to_string()))
+            .unwrap();
+        assert_eq!(stream.next().await.unwrap(), Some("a.service".to_string()));
+        tx.send(("c.service".to_string(), "active".to_string())).unwrap();
+        assert_eq!(stream.next().await.unwrap(), Some("a.service, c.service".to_string()));
+        tx.send(("a.service".to_string(), "deactivating".to_string())).unwrap();
+        assert_eq!(stream.next().await.unwrap(), Some("c.service".to_string()));
     }
 }

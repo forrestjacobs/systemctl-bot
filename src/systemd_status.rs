@@ -1,26 +1,17 @@
 use async_trait::async_trait;
-use futures::{future::join_all, Stream, StreamExt};
+use async_stream::stream;
+use futures::{Stream, StreamExt};
 use mockall::automock;
 use std::{any::Any, pin::Pin, sync::Arc};
 use zbus::{Connection, Result};
 use zbus_systemd::systemd1::{ManagerProxy, UnitProxy};
 
-pub type StatusStream = dyn Stream<Item = String> + Send;
+pub type StatusStream = dyn Stream<Item = Result<String>> + Send;
 
 #[automock]
 #[async_trait]
 pub trait SystemdStatusManager: Any + Sync + Send {
-    async fn status(&self, unit: &str) -> Result<String>;
     async fn status_stream(&self, unit: &str) -> Result<Pin<Box<StatusStream>>>;
-}
-
-pub async fn statuses<'a>(
-    manager: &impl SystemdStatusManager,
-    units: &'a Vec<String>,
-) -> impl Iterator<Item = (&'a str, Result<String>)> {
-    let statuses = units.iter().map(|unit| manager.status(unit));
-    let statuses = join_all(statuses).await;
-    units.into_iter().map(|unit| unit.as_str()).zip(statuses)
 }
 
 pub struct SystemdStatusManagerImpl {
@@ -36,57 +27,22 @@ impl SystemdStatusManagerImpl {
             client: ManagerProxy::new(conn.as_ref()).await?,
         })
     }
-
-    async fn load_unit(&self, name: &str) -> Result<UnitProxy<'static>> {
-        let path = self.client.load_unit(name.into()).await?;
-        UnitProxy::builder(self.conn.as_ref()).path(path)?.build().await
-    }
 }
 
 #[async_trait]
 impl SystemdStatusManager for SystemdStatusManagerImpl {
-    async fn status(&self, unit: &str) -> Result<String> {
-        let unit = self.load_unit(unit).await?;
-        unit.active_state().await
-    }
-
     async fn status_stream(&self, unit: &str) -> Result<Pin<Box<StatusStream>>> {
         let unit_name = unit.to_string();
-        let unit = self.load_unit(unit).await?;
-        let stream = unit.receive_active_state_changed().await;
-        Ok(Box::pin(stream.map(move |_| unit_name.clone())))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use zbus::Error;
-
-    #[tokio::test]
-    async fn get_statuses() {
-        let mut manager = MockSystemdStatusManager::new();
-        manager.expect_status().returning(|unit| {
-            if unit == "invalid.service" {
-                Err(Error::InvalidReply)
-            } else {
-                Ok(unit.strip_suffix(".service").unwrap_or(unit).into())
+        let path = self.client.load_unit(unit_name.clone()).await?;
+        let unit: UnitProxy<'static> = UnitProxy::builder(self.conn.as_ref())
+            .path(path)?
+            .build()
+            .await?;
+        let mut prop_stream = unit.receive_active_state_changed().await;
+        Ok(Box::pin(stream! {
+            while let Some(event) = prop_stream.next().await {
+                yield event.get().await
             }
-        });
-
-        let units = vec![
-            String::from("active.service"),
-            String::from("inactive.service"),
-            String::from("invalid.service"),
-        ];
-        let statuses: Vec<(&str, Result<String>)> = statuses(&manager, &units).await.collect();
-        assert_eq!(
-            statuses,
-            vec![
-                ("active.service", Ok(String::from("active"))),
-                ("inactive.service", Ok(String::from("inactive"))),
-                ("invalid.service", Err(Error::InvalidReply)),
-            ]
-        );
+        }))
     }
 }

@@ -7,6 +7,7 @@ publish = false
 
 [dependencies]
 anyhow = "1.0.96"
+async-stream = "0.3.6"
 async-trait = "0.1.86"
 futures = "0.3"
 mockall = "0.13.1"
@@ -21,6 +22,10 @@ features = ["derive"]
 version = "0.13"
 default-features = false
 features = ["toml"]
+
+[dependencies.rustix]
+version = "1.0.7"
+features = ["process"]
 
 [dependencies.serde]
 version = "1.0"
