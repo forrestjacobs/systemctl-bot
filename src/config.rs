@@ -103,10 +103,7 @@ where
     Ok(name)
 }
 
-fn get_units_with_perms<const N: usize>(
-    units: &[Unit],
-    perms: [UnitPermission; N],
-) -> Vec<String> {
+fn get_units_with_perms<const N: usize>(units: &[Unit], perms: [UnitPermission; N]) -> Vec<String> {
     let perms = HashSet::from(perms);
     units
         .iter()

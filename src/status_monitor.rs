@@ -1,73 +1,56 @@
 use super::systemd::SystemdManager;
 use crate::systemd::StatusStream;
+use anyhow::Result;
 use async_stream::stream;
-use async_trait::async_trait;
 use futures::future::join_all;
 use futures::{Stream, StreamExt};
 use poise::serenity_prelude::all::{ActivityData, Context};
-use std::any::Any;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::Arc;
 use tokio_stream::StreamMap;
-use anyhow::Result;
 
-#[async_trait]
-pub trait StatusMonitor: Any + Send + Sync {
-    async fn monitor(&self, ctx: &Context);
-}
+async fn get_status_stream<'a, S: SystemdManager + ?Sized>(
+    units: &'a [String],
+    systemd: &'a S,
+) -> Result<Pin<Box<impl Stream<Item = Option<String>> + use<'a, S>>>> {
+    let streams = units.iter().map(|u| systemd.active_state_stream(u));
+    let streams = join_all(streams)
+        .await
+        .into_iter()
+        .collect::<Result<Vec<Pin<Box<StatusStream>>>>>()?;
+    let mut streams = StreamMap::from_iter(units.iter().zip(streams));
 
-pub struct StatusMonitorImpl {
-    pub units: Vec<String>,
-    pub systemd: Arc<dyn SystemdManager>,
-}
-
-impl StatusMonitorImpl {
-    async fn get_stream(
-        &self,
-    ) -> Result<Pin<Box<impl Stream<Item = Option<String>> + use<'_>>>> {
-        let streams = self
-            .units
-            .iter()
-            .map(|u| self.systemd.active_state_stream(u));
-        let streams = join_all(streams)
-            .await
-            .into_iter()
-            .collect::<Result<Vec<Pin<Box<StatusStream>>>>>()?;
-        let mut streams =
-            StreamMap::from_iter(self.units.iter().map(String::as_str).zip(streams));
-
-        let mut is_active_by_unit = HashMap::new();
-        Ok(Box::pin(stream! {
-            while let Some((unit, status)) = streams.next().await {
-                let is_active = status.is_ok_and(|v| v == "active");
-                if is_active_by_unit.insert(unit, is_active) == Some(is_active) {
-                    continue;
-                }
-
-                let active_units: Vec<&str> = self.units
-                    .iter()
-                    .filter(|unit| *is_active_by_unit.get(unit.as_str()).unwrap_or(&false))
-                    .map(String::as_str)
-                    .collect();
-
-                yield if active_units.is_empty() {
-                    None
-                } else {
-                    Some(active_units.join(", "))
-                };
+    let mut is_active_by_unit = HashMap::new();
+    Ok(Box::pin(stream! {
+        while let Some((unit, status)) = streams.next().await {
+            let is_active = status.is_ok_and(|v| v == "active");
+            if is_active_by_unit.insert(unit, is_active) == Some(is_active) {
+                continue;
             }
-        }))
-    }
+
+            let active_units: Vec<&str> = units
+                .iter()
+                .filter(|unit| *is_active_by_unit.get(unit).unwrap_or(&false))
+                .map(String::as_str)
+                .collect();
+
+            yield if active_units.is_empty() {
+                None
+            } else {
+                Some(active_units.join(", "))
+            };
+        }
+    }))
 }
 
-#[async_trait]
-impl StatusMonitor for StatusMonitorImpl {
-    async fn monitor(&self, ctx: &Context) {
-        let mut stream = self.get_stream().await.unwrap();
-        while let Some(status) = stream.next().await {
-            ctx.set_activity(status.map(ActivityData::playing));
-        }
+pub async fn monitor_status(
+    ctx: &Context,
+    units: &[String],
+    systemd: &(impl SystemdManager + ?Sized),
+) {
+    let mut stream = get_status_stream(units, systemd).await.unwrap();
+    while let Some(status) = stream.next().await {
+        ctx.set_activity(status.map(ActivityData::playing));
     }
 }
 
@@ -79,8 +62,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_activity_stream() {
-        let units = vec!["a.service", "b.service"];
-
         let (tx, rx) = broadcast::channel::<(&str, &str)>(3);
         let mut manager = MockSystemdManager::new();
         manager
@@ -98,11 +79,9 @@ mod tests {
                     }
                 }))
             });
-        let monitor = StatusMonitorImpl {
-            units: units.iter().map(|s| s.to_string()).collect(),
-            systemd: Arc::from(manager),
-        };
-        let mut stream = monitor.get_stream().await.unwrap();
+
+        let units = vec!["a.service".to_string(), "b.service".to_string()];
+        let mut stream = get_status_stream(units.as_slice(), &manager).await.unwrap();
         tx.send(("a.service", "active")).unwrap();
         assert_eq!(stream.next().await.unwrap(), Some("a.service".to_string()));
         tx.send(("b.service", "active")).unwrap();

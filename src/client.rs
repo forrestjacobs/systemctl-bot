@@ -1,7 +1,7 @@
 use crate::{
     commands::get_commands,
-    config::{CommandType, UnitCollection},
-    status_monitor::StatusMonitor,
+    config::{CommandType, UnitCollection, UnitSection},
+    status_monitor::monitor_status,
     systemd::SystemdManager,
 };
 use anyhow::Error;
@@ -25,7 +25,7 @@ pub trait CommandContext {
 
     fn get_command_name(&self) -> &str;
     fn get_units(&self) -> &UnitCollection;
-    fn get_systemd(&self) -> Arc<dyn SystemdManager>;
+    fn get_systemd(&self) -> &dyn SystemdManager;
 }
 
 impl CommandContext for Context<'_> {
@@ -46,17 +46,21 @@ impl CommandContext for Context<'_> {
     fn get_units(&self) -> &UnitCollection {
         &self.data().units
     }
-    fn get_systemd(&self) -> Arc<dyn SystemdManager> {
-        self.data().systemd.clone()
+    fn get_systemd(&self) -> &dyn SystemdManager {
+        self.data().systemd.as_ref()
     }
 }
 
 pub fn build_framework(
     guild_id: GuildId,
     command_type: CommandType,
-    status_monitor: impl StatusMonitor,
-    data: Arc<Data>,
+    units: UnitSection,
+    systemd: Arc<dyn SystemdManager>,
 ) -> Framework<Arc<Data>, Error> {
+    let data = Arc::from(Data {
+        units: units.command_units,
+        systemd: systemd.clone(),
+    });
     Framework::builder()
         .options(FrameworkOptions {
             commands: get_commands(command_type, &data.units),
@@ -67,7 +71,7 @@ pub fn build_framework(
                 register_in_guild(&ctx.http, &framework.options().commands, guild_id).await?;
                 let ctx = ctx.clone();
                 tokio::spawn(async move {
-                    status_monitor.monitor(&ctx).await;
+                    monitor_status(&ctx, &units.status_units, systemd.as_ref()).await;
                 });
                 Ok(data)
             })

@@ -113,7 +113,11 @@ pub fn get_commands(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{client::MockCommandContext, config::UnitCollection, systemd::{MockSystemdManager, UnitVerb}};
+    use crate::{
+        client::MockCommandContext,
+        config::UnitCollection,
+        systemd::{MockSystemdManager, UnitVerb},
+    };
     use anyhow::bail;
     use mockall::predicate;
     use std::collections::HashMap;
@@ -127,23 +131,18 @@ mod tests {
     }
 
     fn disallow_systemd_run(ctx: &mut MockCommandContext) {
-        ctx.expect_get_systemd().return_once(|| {
-            let mut systemctl = MockSystemdManager::new();
-            systemctl.expect_run().never();
-            Arc::from(systemctl)
-        });
+        let mut systemctl = MockSystemdManager::new();
+        systemctl.expect_run().never();
+        ctx.expect_get_systemd().return_const(Box::from(systemctl));
     }
 
     fn mock_systemctl_run(ctx: &mut MockCommandContext, verb: UnitVerb, unit: &str, is_ok: bool) {
-        let unit = unit.to_string();
-        ctx.expect_get_systemd().return_once(move || {
-            let mut systemctl = MockSystemdManager::new();
-            systemctl
-                .expect_run()
-                .with(predicate::eq(verb), predicate::eq(unit))
-                .returning(move |_,_| if is_ok { Ok(()) } else { bail!("Run error") });
-            Arc::from(systemctl)
-        });
+        let mut systemctl = MockSystemdManager::new();
+        systemctl
+            .expect_run()
+            .with(predicate::eq(verb), predicate::eq(unit.to_string()))
+            .returning(move |_, _| if is_ok { Ok(()) } else { bail!("Run error") });
+        ctx.expect_get_systemd().return_const(Box::from(systemctl));
     }
 
     fn mock_respond(ctx: &mut MockCommandContext, response: &str, is_ok: bool) {

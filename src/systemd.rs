@@ -1,10 +1,10 @@
+use anyhow::{bail, Result};
 use async_stream::stream;
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use mockall::automock;
-use std::{any::Any, pin::Pin, sync::Arc};
-use zbus::{Connection};
-use anyhow::{bail, Result};
+use std::pin::Pin;
+use zbus::Connection;
 use zbus_systemd::systemd1::{ManagerProxy, UnitProxy};
 
 pub type StatusStream = dyn Stream<Item = zbus::Result<String>> + Send;
@@ -18,22 +18,22 @@ pub enum UnitVerb {
 
 #[automock]
 #[async_trait]
-pub trait SystemdManager: Any + Send + Sync {
+pub trait SystemdManager: Send + Sync {
     async fn run(&self, verb: UnitVerb, unit: &str) -> Result<()>;
     async fn active_state_stream(&self, unit: &str) -> Result<Pin<Box<StatusStream>>>;
 }
 
 pub struct SystemdManagerImpl {
-    conn: Arc<Connection>,
+    conn: Connection,
     client: ManagerProxy<'static>,
 }
 
 impl SystemdManagerImpl {
     pub async fn build() -> Result<Self> {
-        let conn = Arc::from(Connection::system().await?);
+        let conn = Connection::system().await?;
         Ok(SystemdManagerImpl {
-            conn: conn.clone(),
-            client: ManagerProxy::new(conn.as_ref()).await?,
+            client: ManagerProxy::new(&conn).await?,
+            conn,
         })
     }
 }
@@ -73,10 +73,7 @@ impl SystemdManager for SystemdManagerImpl {
 
     async fn active_state_stream(&self, unit: &str) -> Result<Pin<Box<StatusStream>>> {
         let path = self.client.load_unit(unit.to_string()).await?;
-        let unit = UnitProxy::builder(self.conn.as_ref())
-            .path(path)?
-            .build()
-            .await?;
+        let unit = UnitProxy::builder(&self.conn).path(path)?.build().await?;
         let mut prop_stream = unit.receive_active_state_changed().await;
         Ok(Box::pin(stream! {
             while let Some(event) = prop_stream.next().await {
