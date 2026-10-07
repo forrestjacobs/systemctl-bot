@@ -1,30 +1,39 @@
-package builder_test
+package handler_test
 
 import (
 	"reflect"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/forrestjacobs/systemctl-bot/internal/builder"
 	"github.com/forrestjacobs/systemctl-bot/internal/config"
+	"github.com/forrestjacobs/systemctl-bot/internal/handler"
 )
 
-type testDiscordSession struct {
+type mockDiscordSession struct {
 	calls [][]any
 }
 
-func (s *testDiscordSession) ApplicationCommandBulkOverwrite(appID string, guildID string, commands []*discordgo.ApplicationCommand, options ...discordgo.RequestOption) (createdCommands []*discordgo.ApplicationCommand, err error) {
+func (s *mockDiscordSession) ApplicationCommandBulkOverwrite(appID string, guildID string, commands []*discordgo.ApplicationCommand, options ...discordgo.RequestOption) (createdCommands []*discordgo.ApplicationCommand, err error) {
 	s.calls = append(s.calls, []any{
 		"ApplicationCommandBulkOverwrite", appID, guildID, commands,
 	})
 	return commands, nil
 }
 
-func getBuilderTestUnits() map[config.Command][]string {
-	return map[config.Command][]string{
-		config.StartCommand:   {"startable.service", "restartable.service"},
-		config.StopCommand:    {"stoppable.service", "restartable.service"},
-		config.RestartCommand: {"restartable.service"},
+func getBuilderTestUnits() []*config.UnitConfig {
+	return []*config.UnitConfig{
+		{
+			Name:        "startable.service",
+			Permissions: []config.Permission{config.StartPermission},
+		},
+		{
+			Name:        "stoppable.service",
+			Permissions: []config.Permission{config.StopPermission},
+		},
+		{
+			Name:        "restartable.service",
+			Permissions: []config.Permission{config.StartPermission, config.StopPermission},
+		},
 	}
 }
 
@@ -64,14 +73,14 @@ func makeUnitOption(description string, required bool, units ...string) *discord
 }
 
 func TestGetSingleCommand(t *testing.T) {
-	s := &testDiscordSession{}
+	s := &mockDiscordSession{}
 	c := &config.Config{
 		ApplicationID: 1,
 		GuildID:       2,
 		CommandType:   config.Single,
-		CommandUnits:  getBuilderTestUnits(),
+		Units:         getBuilderTestUnits(),
 	}
-	err := builder.RegisterCommands(s, c)
+	err := handler.RegisterCommands(s, c)
 
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
@@ -94,14 +103,14 @@ func TestGetSingleCommand(t *testing.T) {
 }
 
 func TestMultipleCommands(t *testing.T) {
-	s := &testDiscordSession{}
+	s := &mockDiscordSession{}
 	c := &config.Config{
 		ApplicationID: 1,
 		GuildID:       2,
 		CommandType:   config.Multiple,
-		CommandUnits:  getBuilderTestUnits(),
+		Units:         getBuilderTestUnits(),
 	}
-	err := builder.RegisterCommands(s, c)
+	err := handler.RegisterCommands(s, c)
 
 	if err != nil {
 		t.Fatalf("Unexpected error %v", err)
@@ -120,14 +129,14 @@ func TestMultipleCommands(t *testing.T) {
 }
 
 func TestInvalidCommandType(t *testing.T) {
-	s := &testDiscordSession{}
+	s := &mockDiscordSession{}
 	c := &config.Config{
 		ApplicationID: 1,
 		GuildID:       2,
 		CommandType:   "invalid",
-		CommandUnits:  getBuilderTestUnits(),
+		Units:         getBuilderTestUnits(),
 	}
-	err := builder.RegisterCommands(s, c)
+	err := handler.RegisterCommands(s, c)
 
 	if err.Error() != "invalid command type" {
 		t.Fatalf("Unexpected error %v", err)

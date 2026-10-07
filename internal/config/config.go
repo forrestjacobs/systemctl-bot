@@ -12,14 +12,6 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-type Command string
-
-const (
-	StartCommand   Command = "start"
-	StopCommand    Command = "stop"
-	RestartCommand Command = "restart"
-)
-
 type CommandType string
 
 const (
@@ -27,35 +19,54 @@ const (
 	Multiple CommandType = "multiple"
 )
 
-type Config struct {
-	ApplicationID uint64
-	DiscordToken  string
-	GuildID       uint64
-	CommandType   CommandType
-	CommandUnits  map[Command][]string
-	StatusUnits   []string
-}
-
-type tomlConfig struct {
-	ApplicationID uint64      `toml:"application_id"`
-	DiscordToken  string      `toml:"discord_token"`
-	GuildID       uint64      `toml:"guild_id"`
-	CommandType   CommandType `toml:"command_type"`
-	Units         []*unit     `toml:"units"`
-}
-
-type unit struct {
-	Name        string
-	Permissions []permission
-}
-
-type permission string
+type Permission string
 
 const (
-	StartPermission  permission = "start"
-	StopPermission   permission = "stop"
-	StatusPermission permission = "status"
+	StartPermission  Permission = "start"
+	StopPermission   Permission = "stop"
+	StatusPermission Permission = "status"
 )
+
+type UnitConfig struct {
+	Name        string
+	Permissions []Permission
+}
+
+func (u *UnitConfig) hasEveryPermission(permissions []Permission) bool {
+	for _, permission := range permissions {
+		if !slices.Contains(u.Permissions, permission) {
+			return false
+		}
+	}
+	return true
+}
+
+type Config struct {
+	ApplicationID uint64        `toml:"application_id"`
+	DiscordToken  string        `toml:"discord_token"`
+	GuildID       uint64        `toml:"guild_id"`
+	CommandType   CommandType   `toml:"command_type"`
+	Units         []*UnitConfig `toml:"units"`
+}
+
+func (c *Config) HasUnitWithPermissions(unitName string, permissions ...Permission) bool {
+	for _, unit := range c.Units {
+		if unit.Name == unitName && unit.hasEveryPermission(permissions) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Config) GetUnitsWithPermissions(permissions ...Permission) []string {
+	value := []string{}
+	for _, unit := range c.Units {
+		if unit.hasEveryPermission(permissions) {
+			value = append(value, unit.Name)
+		}
+	}
+	return value
+}
 
 func lookupUint64Env(key string) (uint64, bool) {
 	strVal, exists := os.LookupEnv(key)
@@ -72,7 +83,7 @@ func lookupUint64Env(key string) (uint64, bool) {
 	return val, true
 }
 
-func getConfigErrors(config tomlConfig) error {
+func getConfigErrors(config Config) error {
 	errs := make([]error, 0)
 
 	if config.ApplicationID == 0 {
@@ -108,27 +119,8 @@ func getConfigErrors(config tomlConfig) error {
 	return errors.Join(errs...)
 }
 
-func hasEveryPermission(u *unit, permissions []permission) bool {
-	for _, permission := range permissions {
-		if !slices.Contains(u.Permissions, permission) {
-			return false
-		}
-	}
-	return true
-}
-
-func getUnitsWithPermissions(units []*unit, permissions ...permission) []string {
-	value := []string{}
-	for _, unit := range units {
-		if hasEveryPermission(unit, permissions) {
-			value = append(value, unit.Name)
-		}
-	}
-	return value
-}
-
 func ReadConfig(r io.Reader) (*Config, error) {
-	var config tomlConfig
+	var config Config
 
 	_, err := toml.NewDecoder(r).Decode(&config)
 	if err != nil {
@@ -158,17 +150,5 @@ func ReadConfig(r io.Reader) (*Config, error) {
 		}
 	}
 
-	units := config.Units
-	return &Config{
-		ApplicationID: config.ApplicationID,
-		DiscordToken:  config.DiscordToken,
-		GuildID:       config.GuildID,
-		CommandType:   config.CommandType,
-		CommandUnits: map[Command][]string{
-			StartCommand:   getUnitsWithPermissions(units, StartPermission),
-			StopCommand:    getUnitsWithPermissions(units, StopPermission),
-			RestartCommand: getUnitsWithPermissions(units, StartPermission, StopPermission),
-		},
-		StatusUnits: getUnitsWithPermissions(units, StatusPermission),
-	}, getConfigErrors(config)
+	return &config, getConfigErrors(config)
 }
