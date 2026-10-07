@@ -12,10 +12,19 @@ import (
 )
 
 var baseConfig = &config.Config{
-	CommandUnits: map[config.Command][]string{
-		config.StartCommand:   {"startable.service"},
-		config.StopCommand:    {"stoppable.service"},
-		config.RestartCommand: {"restartable.service"},
+	Units: []*config.UnitConfig{
+		{
+			Name:        "startable.service",
+			Permissions: []config.Permission{config.StartPermission},
+		},
+		{
+			Name:        "stoppable.service",
+			Permissions: []config.Permission{config.StopPermission},
+		},
+		{
+			Name:        "restartable.service",
+			Permissions: []config.Permission{config.StartPermission, config.StopPermission},
+		},
 	},
 }
 
@@ -86,14 +95,14 @@ func (s *handlerMocks) RestartUnitContext(ctx context.Context, name string, mode
 	return s.handleUnitCommand("RestartUnitContext", name, mode, ch)
 }
 
-func makeSystemdInteraction(command config.Command, options ...*discordgo.ApplicationCommandInteractionDataOption) *discordgo.Interaction {
+func makeSystemdInteraction(commandName string, options ...*discordgo.ApplicationCommandInteractionDataOption) *discordgo.Interaction {
 	return &discordgo.Interaction{
 		Type: discordgo.InteractionApplicationCommand,
 		Data: discordgo.ApplicationCommandInteractionData{
 			Name: "systemctl",
 			Options: []*discordgo.ApplicationCommandInteractionDataOption{
 				{
-					Name:    string(command),
+					Name:    commandName,
 					Options: options,
 				},
 			},
@@ -146,7 +155,7 @@ func TestOnlyHandleApplicationCommands(t *testing.T) {
 
 func TestStartHandlerWithSystemdSlashCommand(t *testing.T) {
 	m := handlerMocks{}
-	interaction := makeSystemdInteraction(config.StartCommand, makeStringOption("startable.service"))
+	interaction := makeSystemdInteraction("start", makeStringOption("startable.service"))
 	callHandler(&m, baseConfig, interaction)
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(interaction),
@@ -182,7 +191,7 @@ func TestStartHandlerWithStartSlashCommand(t *testing.T) {
 
 func TestStartSystemdTimeoutHandler(t *testing.T) {
 	m := handlerMocks{systemdResult: "timeout"}
-	interaction := makeSystemdInteraction(config.StartCommand, makeStringOption("startable.service"))
+	interaction := makeSystemdInteraction("start", makeStringOption("startable.service"))
 	callHandler(&m, baseConfig, interaction)
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(interaction),
@@ -195,7 +204,7 @@ func TestStartSystemdTimeoutHandler(t *testing.T) {
 
 func TestStartDiscordErrorHandler(t *testing.T) {
 	m := handlerMocks{discordError: errors.New("discord error")}
-	interaction := makeSystemdInteraction(config.StartCommand, makeStringOption("startable.service"))
+	interaction := makeSystemdInteraction("start", makeStringOption("startable.service"))
 	callHandler(&m, baseConfig, interaction)
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(interaction),
@@ -206,7 +215,7 @@ func TestStartDiscordErrorHandler(t *testing.T) {
 
 func TestStartSystemdErrorHandler(t *testing.T) {
 	m := handlerMocks{systemdError: errors.New("could not start")}
-	interaction := makeSystemdInteraction(config.StartCommand, makeStringOption("startable.service"))
+	interaction := makeSystemdInteraction("start", makeStringOption("startable.service"))
 	callHandler(&m, baseConfig, interaction)
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(interaction),
@@ -219,7 +228,7 @@ func TestStartSystemdErrorHandler(t *testing.T) {
 
 func TestStartDisallowedHandler(t *testing.T) {
 	m := handlerMocks{}
-	interaction := makeSystemdInteraction(config.StartCommand, makeStringOption("disallowed.service"))
+	interaction := makeSystemdInteraction("start", makeStringOption("disallowed.service"))
 	callHandler(&m, baseConfig, interaction)
 	if len(m.calls) > 0 {
 		t.Error("Unexpected calls")
@@ -228,7 +237,7 @@ func TestStartDisallowedHandler(t *testing.T) {
 
 func TestStopHandler(t *testing.T) {
 	m := handlerMocks{}
-	interaction := makeSystemdInteraction(config.StopCommand, makeStringOption("stoppable.service"))
+	interaction := makeSystemdInteraction("stop", makeStringOption("stoppable.service"))
 	callHandler(&m, baseConfig, interaction)
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(interaction),
@@ -241,7 +250,7 @@ func TestStopHandler(t *testing.T) {
 
 func TestStopTimeoutHandler(t *testing.T) {
 	m := handlerMocks{systemdResult: "timeout"}
-	interaction := makeSystemdInteraction(config.StopCommand, makeStringOption("stoppable.service"))
+	interaction := makeSystemdInteraction("stop", makeStringOption("stoppable.service"))
 	callHandler(&m, baseConfig, interaction)
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(interaction),
@@ -254,7 +263,7 @@ func TestStopTimeoutHandler(t *testing.T) {
 
 func TestStopSystemdErrorHandler(t *testing.T) {
 	m := handlerMocks{systemdError: errors.New("could not stop")}
-	interaction := makeSystemdInteraction(config.StopCommand, makeStringOption("stoppable.service"))
+	interaction := makeSystemdInteraction("stop", makeStringOption("stoppable.service"))
 	callHandler(&m, baseConfig, interaction)
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(interaction),
@@ -267,7 +276,7 @@ func TestStopSystemdErrorHandler(t *testing.T) {
 
 func TestStopDisallowedHandler(t *testing.T) {
 	m := handlerMocks{}
-	interaction := makeSystemdInteraction(config.StopCommand, makeStringOption("disallowed.service"))
+	interaction := makeSystemdInteraction("stop", makeStringOption("disallowed.service"))
 	callHandler(&m, baseConfig, interaction)
 	if len(m.calls) > 0 {
 		t.Error("Unexpected calls")
@@ -276,7 +285,7 @@ func TestStopDisallowedHandler(t *testing.T) {
 
 func TestRestartHandler(t *testing.T) {
 	m := handlerMocks{}
-	interaction := makeSystemdInteraction(config.RestartCommand, makeStringOption("restartable.service"))
+	interaction := makeSystemdInteraction("restart", makeStringOption("restartable.service"))
 	callHandler(&m, baseConfig, interaction)
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(interaction),
@@ -289,7 +298,7 @@ func TestRestartHandler(t *testing.T) {
 
 func TestRestartTimeoutHandler(t *testing.T) {
 	m := handlerMocks{systemdResult: "timeout"}
-	interaction := makeSystemdInteraction(config.RestartCommand, makeStringOption("restartable.service"))
+	interaction := makeSystemdInteraction("restart", makeStringOption("restartable.service"))
 	callHandler(&m, baseConfig, interaction)
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(interaction),
@@ -302,7 +311,7 @@ func TestRestartTimeoutHandler(t *testing.T) {
 
 func TestRestartSystemdErrorHandler(t *testing.T) {
 	m := handlerMocks{systemdError: errors.New("could not restart")}
-	interaction := makeSystemdInteraction(config.RestartCommand, makeStringOption("restartable.service"))
+	interaction := makeSystemdInteraction("restart", makeStringOption("restartable.service"))
 	callHandler(&m, baseConfig, interaction)
 	if !reflect.DeepEqual(m.calls, []mockCall{
 		mockCallForDeferResponse(interaction),
@@ -315,7 +324,7 @@ func TestRestartSystemdErrorHandler(t *testing.T) {
 
 func TestRestartDisallowedHandler(t *testing.T) {
 	m := handlerMocks{}
-	interaction := makeSystemdInteraction(config.RestartCommand, makeStringOption("disallowed.service"))
+	interaction := makeSystemdInteraction("restart", makeStringOption("disallowed.service"))
 	callHandler(&m, baseConfig, interaction)
 	if len(m.calls) > 0 {
 		t.Error("Unexpected calls")

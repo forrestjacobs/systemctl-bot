@@ -2,15 +2,26 @@ package handler
 
 import (
 	"context"
-	"log"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/forrestjacobs/systemctl-bot/internal/config"
 )
 
-func logError(err error) {
-	if err != nil {
-		log.Println(err)
+func getUnitOption(description string, units []string) *discordgo.ApplicationCommandOption {
+	choices := []*discordgo.ApplicationCommandOptionChoice{}
+	for _, unit := range units {
+		choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
+			Name:  strings.TrimSuffix(unit, ".service"),
+			Value: unit,
+		})
+	}
+	return &discordgo.ApplicationCommandOption{
+		Name:        "unit",
+		Type:        discordgo.ApplicationCommandOptionString,
+		Description: description,
+		Required:    true,
+		Choices:     choices,
 	}
 }
 
@@ -27,46 +38,64 @@ func getSystemdResponse(doneString string, resultChan <-chan string, err error) 
 	return result
 }
 
-func deferResponse(ctx *commandCtx) bool {
-	err := ctx.session.InteractionRespond(ctx.interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
-	})
-	logError(err)
-	return err == nil
-}
-
-func followUp(ctx *commandCtx, content string) {
-	_, err := ctx.session.FollowupMessageCreate(ctx.interaction, false, &discordgo.WebhookParams{
-		Content: content,
-	})
-	logError(err)
-}
-
-var commandHandlers = map[config.Command]func(ctx *commandCtx, runner *commandRunner){
-	config.StartCommand: func(ctx *commandCtx, runner *commandRunner) {
-		unit := ctx.options[0].StringValue()
-		if runner.checkAllowed(config.StartCommand, unit) && deferResponse(ctx) {
-			resultChan := make(chan string)
-			_, err := runner.systemd.StartUnitContext(context.Background(), unit, "replace", resultChan)
-			followUp(ctx, getSystemdResponse("Started "+unit, resultChan, err))
+var start = Command{
+	Name:        "start",
+	Description: "Start units",
+	Build: func(c *config.Config) ([]*discordgo.ApplicationCommandOption, bool) {
+		units := c.GetUnitsWithPermissions(config.StartPermission)
+		if len(units) == 0 {
+			return nil, false
 		}
+		return []*discordgo.ApplicationCommandOption{getUnitOption("The unit to start", units)}, true
 	},
-
-	config.StopCommand: func(ctx *commandCtx, runner *commandRunner) {
-		unit := ctx.options[0].StringValue()
-		if runner.checkAllowed(config.StopCommand, unit) && deferResponse(ctx) {
+	Handle: func(ctx *HandleContext) {
+		unit := ctx.Options[0].StringValue()
+		if ctx.checkAllowed(unit, config.StartPermission) && ctx.deferResponse() {
 			resultChan := make(chan string)
-			_, err := runner.systemd.StopUnitContext(context.Background(), unit, "replace", resultChan)
-			followUp(ctx, getSystemdResponse("Stopped "+unit, resultChan, err))
-		}
-	},
-
-	config.RestartCommand: func(ctx *commandCtx, runner *commandRunner) {
-		unit := ctx.options[0].StringValue()
-		if runner.checkAllowed(config.RestartCommand, unit) && deferResponse(ctx) {
-			resultChan := make(chan string)
-			_, err := runner.systemd.RestartUnitContext(context.Background(), unit, "replace", resultChan)
-			followUp(ctx, getSystemdResponse("Restarted "+unit, resultChan, err))
+			_, err := ctx.Systemd.StartUnitContext(context.Background(), unit, "replace", resultChan)
+			ctx.followUp(getSystemdResponse("Started "+unit, resultChan, err))
 		}
 	},
 }
+
+var stop = Command{
+	Name:        "stop",
+	Description: "Stop units",
+	Build: func(c *config.Config) ([]*discordgo.ApplicationCommandOption, bool) {
+		units := c.GetUnitsWithPermissions(config.StopPermission)
+		if len(units) == 0 {
+			return nil, false
+		}
+		return []*discordgo.ApplicationCommandOption{getUnitOption("The unit to stop", units)}, true
+	},
+	Handle: func(ctx *HandleContext) {
+		unit := ctx.Options[0].StringValue()
+		if ctx.checkAllowed(unit, config.StopPermission) && ctx.deferResponse() {
+			resultChan := make(chan string)
+			_, err := ctx.Systemd.StopUnitContext(context.Background(), unit, "replace", resultChan)
+			ctx.followUp(getSystemdResponse("Stopped "+unit, resultChan, err))
+		}
+	},
+}
+
+var restart = Command{
+	Name:        "restart",
+	Description: "Restart units",
+	Build: func(c *config.Config) ([]*discordgo.ApplicationCommandOption, bool) {
+		units := c.GetUnitsWithPermissions(config.StartPermission, config.StopPermission)
+		if len(units) == 0 {
+			return nil, false
+		}
+		return []*discordgo.ApplicationCommandOption{getUnitOption("The unit to restart", units)}, true
+	},
+	Handle: func(ctx *HandleContext) {
+		unit := ctx.Options[0].StringValue()
+		if ctx.checkAllowed(unit, config.StartPermission, config.StopPermission) && ctx.deferResponse() {
+			resultChan := make(chan string)
+			_, err := ctx.Systemd.RestartUnitContext(context.Background(), unit, "replace", resultChan)
+			ctx.followUp(getSystemdResponse("Restarted "+unit, resultChan, err))
+		}
+	},
+}
+
+var Commands []*Command = []*Command{&start, &stop, &restart}

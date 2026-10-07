@@ -8,7 +8,6 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/coreos/go-systemd/v22/dbus"
-	"github.com/forrestjacobs/systemctl-bot/internal/builder"
 	"github.com/forrestjacobs/systemctl-bot/internal/config"
 	"github.com/forrestjacobs/systemctl-bot/internal/handler"
 	"github.com/forrestjacobs/systemctl-bot/internal/status"
@@ -67,7 +66,7 @@ func main() {
 	dieOnError(discord.Open(), DiscordOpenConnectionError)
 	defer discord.Close()
 
-	dieOnError(builder.RegisterCommands(discord, c), DiscordSetCommandError)
+	dieOnError(handler.RegisterCommands(discord, c), DiscordSetCommandError)
 
 	status.UpdateStatusFromUnits(discord, c, conn.NewSubscriptionSet())
 

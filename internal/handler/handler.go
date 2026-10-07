@@ -1,45 +1,9 @@
 package handler
 
 import (
-	"context"
-	"log"
-	"slices"
-
 	"github.com/bwmarrin/discordgo"
 	"github.com/forrestjacobs/systemctl-bot/internal/config"
 )
-
-type DiscordSession interface {
-	AddHandler(handler interface{}) func()
-	InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse, options ...discordgo.RequestOption) error
-	FollowupMessageCreate(interaction *discordgo.Interaction, wait bool, data *discordgo.WebhookParams, options ...discordgo.RequestOption) (*discordgo.Message, error)
-}
-
-type Systemd interface {
-	StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
-	StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
-	RestartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
-}
-
-type commandCtx struct {
-	commandName string
-	options     []*discordgo.ApplicationCommandInteractionDataOption
-	session     DiscordSession
-	interaction *discordgo.Interaction
-}
-
-type commandRunner struct {
-	systemd Systemd
-	units   map[config.Command][]string
-}
-
-func (runner *commandRunner) checkAllowed(command config.Command, value string) bool {
-	allowed := slices.Contains(runner.units[command], value)
-	if !allowed {
-		log.Println(string(command) + " is not an allowed command for " + value)
-	}
-	return allowed
-}
 
 func getCommandData(data *discordgo.ApplicationCommandInteractionData) (string, []*discordgo.ApplicationCommandInteractionDataOption) {
 	if data.Name == "systemctl" {
@@ -51,23 +15,26 @@ func getCommandData(data *discordgo.ApplicationCommandInteractionData) (string, 
 }
 
 func AddHandler(session DiscordSession, systemd Systemd, c *config.Config) {
-	runner := &commandRunner{
-		systemd: systemd,
-		units:   c.CommandUnits,
+	commandByName := make(map[string]*Command)
+	for _, cmd := range Commands {
+		commandByName[cmd.Name] = cmd
 	}
+
 	session.AddHandler(func(s *discordgo.Session, event *discordgo.InteractionCreate) {
 		if event.Type != discordgo.InteractionApplicationCommand {
 			return
 		}
 		data := event.ApplicationCommandData()
 		commandName, options := getCommandData(&data)
-		if handler, ok := commandHandlers[config.Command(commandName)]; ok {
-			handler(&commandCtx{
-				commandName: commandName,
-				options:     options,
-				session:     session,
-				interaction: event.Interaction,
-			}, runner)
+		if cmd := commandByName[commandName]; cmd != nil {
+			cmd.Handle(&HandleContext{
+				CommandName: commandName,
+				Options:     options,
+				Session:     session,
+				Interaction: event.Interaction,
+				Systemd:     systemd,
+				Config:      c,
+			})
 		}
 	})
 }

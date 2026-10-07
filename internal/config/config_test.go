@@ -26,13 +26,33 @@ func getBaseConfig() *config.Config {
 		GuildID:       2,
 		DiscordToken:  "a",
 		CommandType:   config.Single,
-		CommandUnits: map[config.Command][]string{
-			config.StartCommand:   {},
-			config.StopCommand:    {},
-			config.RestartCommand: {},
+		Units: []*config.UnitConfig{
+			{
+				Name:        "s.service",
+				Permissions: []config.Permission{config.StatusPermission},
+			},
 		},
-		StatusUnits: []string{"s.service"},
 	}
+}
+
+func getPermissionConfig() *config.Config {
+	return &config.Config{
+		Units: []*config.UnitConfig{
+			{
+				Name:        "startable.service",
+				Permissions: []config.Permission{config.StartPermission},
+			},
+			{
+				Name:        "stoppable.service",
+				Permissions: []config.Permission{config.StopPermission},
+			},
+			{
+				Name:        "restartable.service",
+				Permissions: []config.Permission{config.StartPermission, config.StopPermission},
+			},
+		},
+	}
+
 }
 
 func TestReadConfig(t *testing.T) {
@@ -77,8 +97,7 @@ func TestReadConfigWithEnvironmentVariables(t *testing.T) {
 		GuildID:       20,
 		DiscordToken:  "Z",
 		CommandType:   config.Multiple,
-		CommandUnits:  baseConfig.CommandUnits,
-		StatusUnits:   baseConfig.StatusUnits,
+		Units:         baseConfig.Units,
 	}) {
 		t.Error("Not equal")
 	}
@@ -107,12 +126,16 @@ func TestReadConfigSuppliesDefaults(t *testing.T) {
 		GuildID:       2,
 		DiscordToken:  "a",
 		CommandType:   config.Single,
-		CommandUnits: map[config.Command][]string{
-			config.StartCommand:   {},
-			config.StopCommand:    {},
-			config.RestartCommand: {},
+		Units: []*config.UnitConfig{
+			{
+				Name:        "s.service",
+				Permissions: []config.Permission{config.StatusPermission},
+			},
+			{
+				Name:        "t.timer",
+				Permissions: []config.Permission{config.StatusPermission},
+			},
 		},
-		StatusUnits: []string{"s.service", "t.timer"},
 	}) {
 		t.Error("Not equal")
 	}
@@ -234,5 +257,27 @@ func TestReadConfigWithInvalidUnitPermission(t *testing.T) {
 	`))
 	if err.Error() != "invalid unit permission" {
 		t.Fatalf("Unexpected error %v", err)
+	}
+}
+
+func TestHasUnitWithPermissions(t *testing.T) {
+	c := getPermissionConfig()
+	if !c.HasUnitWithPermissions("startable.service", config.StartPermission) ||
+		c.HasUnitWithPermissions("startable.service", config.StopPermission) ||
+		c.HasUnitWithPermissions("startable.service", config.StartPermission, config.StopPermission) ||
+		!c.HasUnitWithPermissions("restartable.service", config.StartPermission) ||
+		!c.HasUnitWithPermissions("restartable.service", config.StopPermission) ||
+		!c.HasUnitWithPermissions("restartable.service", config.StartPermission, config.StopPermission) ||
+		c.HasUnitWithPermissions("restartable.service", config.StartPermission, config.StopPermission, config.StatusPermission) {
+		t.Fatalf("Unexpected permission result")
+	}
+}
+
+func TestGetUnitsWithPermissions(t *testing.T) {
+	c := getPermissionConfig()
+	if !reflect.DeepEqual(c.GetUnitsWithPermissions(config.StartPermission), []string{"startable.service", "restartable.service"}) ||
+		!reflect.DeepEqual(c.GetUnitsWithPermissions(config.StartPermission, config.StopPermission), []string{"restartable.service"}) ||
+		!reflect.DeepEqual(c.GetUnitsWithPermissions(config.StartPermission, config.StopPermission, config.StatusPermission), []string{}) {
+		t.Fatalf("Unexpected permission result")
 	}
 }
