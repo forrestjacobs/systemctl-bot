@@ -9,11 +9,11 @@ import (
 	"github.com/forrestjacobs/systemctl-bot/internal/handler"
 )
 
-type mockDiscordSession struct {
+type testDiscordSession struct {
 	calls [][]any
 }
 
-func (s *mockDiscordSession) ApplicationCommandBulkOverwrite(appID string, guildID string, commands []*discordgo.ApplicationCommand, options ...discordgo.RequestOption) (createdCommands []*discordgo.ApplicationCommand, err error) {
+func (s *testDiscordSession) ApplicationCommandBulkOverwrite(appID string, guildID string, commands []*discordgo.ApplicationCommand, options ...discordgo.RequestOption) (createdCommands []*discordgo.ApplicationCommand, err error) {
 	s.calls = append(s.calls, []any{
 		"ApplicationCommandBulkOverwrite", appID, guildID, commands,
 	})
@@ -73,7 +73,7 @@ func makeUnitOption(description string, required bool, units ...string) *discord
 }
 
 func TestGetSingleCommand(t *testing.T) {
-	s := &mockDiscordSession{}
+	s := &testDiscordSession{}
 	c := &config.Config{
 		ApplicationID: 1,
 		GuildID:       2,
@@ -103,7 +103,7 @@ func TestGetSingleCommand(t *testing.T) {
 }
 
 func TestMultipleCommands(t *testing.T) {
-	s := &mockDiscordSession{}
+	s := &testDiscordSession{}
 	c := &config.Config{
 		ApplicationID: 1,
 		GuildID:       2,
@@ -129,7 +129,7 @@ func TestMultipleCommands(t *testing.T) {
 }
 
 func TestInvalidCommandType(t *testing.T) {
-	s := &mockDiscordSession{}
+	s := &testDiscordSession{}
 	c := &config.Config{
 		ApplicationID: 1,
 		GuildID:       2,

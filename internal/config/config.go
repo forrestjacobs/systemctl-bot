@@ -19,28 +19,6 @@ const (
 	Multiple CommandType = "multiple"
 )
 
-type Permission string
-
-const (
-	StartPermission  Permission = "start"
-	StopPermission   Permission = "stop"
-	StatusPermission Permission = "status"
-)
-
-type UnitConfig struct {
-	Name        string
-	Permissions []Permission
-}
-
-func (u *UnitConfig) hasEveryPermission(permissions []Permission) bool {
-	for _, permission := range permissions {
-		if !slices.Contains(u.Permissions, permission) {
-			return false
-		}
-	}
-	return true
-}
-
 type Config struct {
 	ApplicationID uint64        `toml:"application_id"`
 	DiscordToken  string        `toml:"discord_token"`
@@ -67,6 +45,28 @@ func (c *Config) GetUnitsWithPermissions(permissions ...Permission) []string {
 	}
 	return value
 }
+
+type UnitConfig struct {
+	Name        string
+	Permissions []Permission
+}
+
+func (u *UnitConfig) hasEveryPermission(permissions []Permission) bool {
+	for _, permission := range permissions {
+		if !slices.Contains(u.Permissions, permission) {
+			return false
+		}
+	}
+	return true
+}
+
+type Permission string
+
+const (
+	StartPermission  Permission = "start"
+	StopPermission   Permission = "stop"
+	StatusPermission Permission = "status"
+)
 
 func lookupUint64Env(key string) (uint64, bool) {
 	strVal, exists := os.LookupEnv(key)
