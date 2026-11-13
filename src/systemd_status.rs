@@ -1,25 +1,5 @@
-use async_trait::async_trait;
 use futures::future::join_all;
-use shaku::{Component, Interface};
 use zbus::{dbus_proxy, Connection, Error, PropertyStream};
-
-#[async_trait]
-pub trait SystemdStatusManager: Interface {
-    async fn status(&self, unit: &str) -> Result<String, Error>;
-    async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>, Error>;
-}
-
-impl dyn SystemdStatusManager {
-    pub async fn statuses<'a, I: Iterator<Item = &'a str>>(
-        &self,
-        units: I,
-    ) -> Vec<(&'a str, Result<String, Error>)> {
-        let units: Vec<&str> = units.collect();
-        let statuses = units.iter().map(|unit| self.status(unit));
-        let statuses = join_all(statuses).await;
-        units.into_iter().zip(statuses).collect()
-    }
-}
 
 #[dbus_proxy(
     interface = "org.freedesktop.systemd1.Manager",
@@ -40,28 +20,35 @@ trait Unit {
     fn active_state(&self) -> zbus::Result<String>;
 }
 
-#[derive(Component)]
-#[shaku(interface = SystemdStatusManager)]
-pub struct SystemdStatusManagerImpl {
+pub struct SystemdStatusManager {
     client: ManagerProxy<'static>,
 }
 
-#[async_trait]
-impl SystemdStatusManager for SystemdStatusManagerImpl {
-    async fn status(&self, unit: &str) -> Result<String, Error> {
+impl SystemdStatusManager {
+    pub async fn status(&self, unit: &str) -> Result<String, Error> {
         let unit = self.client.load_unit(unit).await?;
         unit.active_state().await
     }
 
-    async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>, Error> {
+    pub async fn status_stream(&self, unit: &str) -> Result<PropertyStream<'_, String>, Error> {
         let unit = self.client.load_unit(unit).await?;
         Ok(unit.receive_active_state_changed().await)
     }
+
+    pub async fn statuses<'a, I: Iterator<Item = &'a str>>(
+        &self,
+        units: I,
+    ) -> Vec<(&'a str, Result<String, Error>)> {
+        let units: Vec<&str> = units.collect();
+        let statuses = units.iter().map(|unit| self.status(unit));
+        let statuses = join_all(statuses).await;
+        units.into_iter().zip(statuses).collect()
+    }
 }
 
-pub async fn make_params() -> Result<SystemdStatusManagerImplParameters, Error> {
+pub async fn build() -> Result<SystemdStatusManager, Error> {
     let conn = Connection::system().await?;
-    Ok(SystemdStatusManagerImplParameters {
+    Ok(SystemdStatusManager {
         client: ManagerProxy::new(&conn).await?,
     })
 }

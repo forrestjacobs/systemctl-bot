@@ -1,5 +1,3 @@
-use async_trait::async_trait;
-use shaku::{Component, Interface};
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
@@ -46,18 +44,9 @@ impl From<Output> for SystemctlError {
     }
 }
 
-#[async_trait]
-pub trait Systemctl: Interface {
-    async fn start(&self, unit: &str) -> Result<(), SystemctlError>;
-    async fn stop(&self, unit: &str) -> Result<(), SystemctlError>;
-    async fn restart(&self, unit: &str) -> Result<(), SystemctlError>;
-}
+pub struct Systemctl;
 
-#[derive(Component)]
-#[shaku(interface = Systemctl)]
-pub struct SystemctlImpl;
-
-impl SystemctlImpl {
+impl Systemctl {
     async fn run<S: AsRef<OsStr>, T: AsRef<OsStr>>(verb: S, unit: T) -> Result<(), SystemctlError> {
         let output = Command::new("systemctl")
             .arg(verb)
@@ -70,17 +59,14 @@ impl SystemctlImpl {
             Err(SystemctlError::from(output))
         }
     }
-}
 
-#[async_trait]
-impl Systemctl for SystemctlImpl {
-    async fn start(&self, unit: &str) -> Result<(), SystemctlError> {
+    pub async fn start(&self, unit: &str) -> Result<(), SystemctlError> {
         Self::run("start", &unit).await
     }
-    async fn stop(&self, unit: &str) -> Result<(), SystemctlError> {
+    pub async fn stop(&self, unit: &str) -> Result<(), SystemctlError> {
         Self::run("stop", &unit).await
     }
-    async fn restart(&self, unit: &str) -> Result<(), SystemctlError> {
+    pub async fn restart(&self, unit: &str) -> Result<(), SystemctlError> {
         Self::run("restart", &unit).await
     }
 }

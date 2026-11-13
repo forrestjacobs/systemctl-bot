@@ -1,10 +1,6 @@
 use clap::Parser;
 use serde::{self, Deserialize, Deserializer};
-use shaku::{Component, Interface, Module, ModuleBuildContext};
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Deref,
-};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Hash, PartialEq, Eq)]
 pub enum Command {
@@ -102,24 +98,6 @@ where
     Ok(units)
 }
 
-pub trait Config: Interface {
-    fn get(&self) -> &SystemctlBotConfig;
-}
-
-impl Deref for dyn Config {
-    type Target = SystemctlBotConfig;
-    fn deref(&self) -> &SystemctlBotConfig {
-        self.get()
-    }
-}
-
-pub struct ConfigImpl(SystemctlBotConfig);
-impl Config for ConfigImpl {
-    fn get(&self) -> &SystemctlBotConfig {
-        &self.0
-    }
-}
-
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
 struct Args {
@@ -127,19 +105,13 @@ struct Args {
     config: String,
 }
 
-impl<M: Module> Component<M> for ConfigImpl {
-    type Interface = dyn Config;
-    type Parameters = ();
-
-    fn build(_context: &mut ModuleBuildContext<M>, _params: ()) -> Box<dyn Config> {
-        let args = Args::parse();
-        let config = config::Config::builder()
-            .add_source(config::File::with_name(&args.config))
-            .add_source(config::Environment::with_prefix("SBOT"))
-            .build()
-            .unwrap()
-            .try_deserialize()
-            .unwrap();
-        Box::new(ConfigImpl(config))
-    }
+pub fn build() -> SystemctlBotConfig {
+    let args = Args::parse();
+    config::Config::builder()
+        .add_source(config::File::with_name(&args.config))
+        .add_source(config::Environment::with_prefix("SBOT"))
+        .build()
+        .expect("Unable to read config")
+        .try_deserialize()
+        .expect("Unable to parse config")
 }

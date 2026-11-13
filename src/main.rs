@@ -1,5 +1,4 @@
 mod builder;
-mod client;
 mod command;
 mod config;
 mod handler;
@@ -8,31 +7,51 @@ mod status_monitor;
 mod systemctl;
 mod systemd_status;
 
-use client::{ClientBuilder, ClientBuilderImpl};
-use command::CommandRunnerImpl;
-use config::ConfigImpl;
-use handler::HandlerImpl;
-use parser::ParserImpl;
-use shaku::{module, HasComponent};
-use status_monitor::StatusMonitorImpl;
-use systemctl::SystemctlImpl;
-use systemd_status::SystemdStatusManagerImpl;
+use std::sync::Arc;
 
-module! {
-    RootModule {
-        components = [ClientBuilderImpl, CommandRunnerImpl, ConfigImpl, ParserImpl, StatusMonitorImpl, SystemctlImpl, SystemdStatusManagerImpl, HandlerImpl],
-        providers = [],
-    }
-}
+use serenity::all::{ApplicationId, Client, GatewayIntents};
+
+use crate::{
+    command::CommandRunner, handler::Handler, parser::Parser, status_monitor::StatusMonitor,
+    systemctl::Systemctl,
+};
 
 #[tokio::main]
 async fn main() {
-    let module = RootModule::builder()
-        .with_component_parameters::<SystemdStatusManagerImpl>(
-            systemd_status::make_params().await.unwrap(),
-        )
-        .build();
+    let config = Arc::new(config::build());
 
-    let client_builder: &dyn ClientBuilder = module.resolve_ref();
-    client_builder.build().await.unwrap().start().await.unwrap();
+    let systemctl = Arc::new(Systemctl);
+
+    let systemd_status_manager = Arc::new(systemd_status::build().await.unwrap());
+
+    let parser = Arc::new(Parser {
+        config: Arc::clone(&config),
+    });
+    let command_runner = Arc::new(CommandRunner {
+        config: Arc::clone(&config),
+        systemctl,
+        systemd_status_manager: Arc::clone(&systemd_status_manager),
+    });
+
+    let status_monitor = Arc::new(StatusMonitor {
+        config: Arc::clone(&config),
+        systemd_status_manager,
+    });
+
+    Client::builder(
+        config.discord_token.clone(),
+        GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
+    )
+    .application_id(ApplicationId::new(config.application_id))
+    .event_handler(Handler {
+        config,
+        parser,
+        command_runner,
+        status_monitor,
+    })
+    .await
+    .unwrap()
+    .start()
+    .await
+    .unwrap();
 }

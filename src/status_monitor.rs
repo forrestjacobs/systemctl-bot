@@ -1,29 +1,18 @@
 use super::systemd_status::SystemdStatusManager;
-use crate::config::{Command, Config};
-use async_trait::async_trait;
+use crate::config::{Command, SystemctlBotConfig};
 use futures::future::join_all;
 use futures::StreamExt;
 use serenity::all::{ActivityData, Context};
-use shaku::{Component, Interface};
 use std::sync::Arc;
 use tokio_stream::StreamMap;
 use zbus::PropertyStream;
 
-#[async_trait]
-pub trait StatusMonitor: Interface {
-    async fn monitor(&self, ctx: Context);
+pub struct StatusMonitor {
+    pub config: Arc<SystemctlBotConfig>,
+    pub systemd_status_manager: Arc<SystemdStatusManager>,
 }
 
-#[derive(Component)]
-#[shaku(interface = StatusMonitor)]
-pub struct StatusMonitorImpl {
-    #[shaku(inject)]
-    config: Arc<dyn Config>,
-    #[shaku(inject)]
-    systemd_status_manager: Arc<dyn SystemdStatusManager>,
-}
-
-impl StatusMonitorImpl {
+impl StatusMonitor {
     async fn update_activity_stream(
         &self,
     ) -> Result<StreamMap<&str, PropertyStream<'_, String>>, zbus::Error> {
@@ -59,11 +48,8 @@ impl StatusMonitorImpl {
             ctx.set_activity(Some(activity));
         }
     }
-}
 
-#[async_trait]
-impl StatusMonitor for StatusMonitorImpl {
-    async fn monitor(&self, ctx: Context) {
+    pub async fn monitor(&self, ctx: Context) {
         let mut stream = self.update_activity_stream().await.unwrap();
         self.update_activity(&ctx).await;
         while stream.next().await.is_some() {

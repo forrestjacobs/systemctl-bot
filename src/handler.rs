@@ -1,38 +1,25 @@
 use crate::builder::build_commands;
 use crate::command::CommandRunner;
-use crate::config::Config;
+use crate::config::SystemctlBotConfig;
 use crate::parser::Parser;
 use crate::status_monitor::StatusMonitor;
 use async_trait::async_trait;
 use serenity::all::{
     Context, CreateInteractionResponse, CreateInteractionResponseFollowup,
-    CreateInteractionResponseMessage, GuildId, Interaction,
+    CreateInteractionResponseMessage, EventHandler, GuildId, Interaction, Ready,
 };
-use shaku::{Component, Interface};
 use std::sync::Arc;
 
-#[async_trait]
-pub trait Handler: Interface {
-    async fn ready(&self, ctx: Context);
-    async fn interaction_create(&self, ctx: Context, interaction: Interaction);
-}
-
-#[derive(Component)]
-#[shaku(interface = Handler)]
-pub struct HandlerImpl {
-    #[shaku(inject)]
-    config: Arc<dyn Config>,
-    #[shaku(inject)]
-    parser: Arc<dyn Parser>,
-    #[shaku(inject)]
-    command_runner: Arc<dyn CommandRunner>,
-    #[shaku(inject)]
-    status_monitor: Arc<dyn StatusMonitor>,
+pub struct Handler {
+    pub config: Arc<SystemctlBotConfig>,
+    pub parser: Arc<Parser>,
+    pub command_runner: Arc<CommandRunner>,
+    pub status_monitor: Arc<StatusMonitor>,
 }
 
 #[async_trait]
-impl Handler for HandlerImpl {
-    async fn ready(&self, ctx: Context) {
+impl EventHandler for Handler {
+    async fn ready(&self, ctx: Context, _ready: Ready) {
         GuildId::new(self.config.guild_id)
             .set_commands(
                 &ctx.http,

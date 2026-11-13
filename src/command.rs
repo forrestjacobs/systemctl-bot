@@ -1,8 +1,6 @@
-use crate::config::{Command, Config};
+use crate::config::{Command, SystemctlBotConfig};
 use crate::systemctl::{Systemctl, SystemctlError};
 use crate::systemd_status::SystemdStatusManager;
-use async_trait::async_trait;
-use shaku::{Component, Interface};
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -49,23 +47,13 @@ impl From<zbus::Error> for CommandRunnerError {
     }
 }
 
-#[async_trait]
-pub trait CommandRunner: Interface {
-    async fn run(&self, command: &UserCommand) -> Result<String, CommandRunnerError>;
+pub struct CommandRunner {
+    pub config: Arc<SystemctlBotConfig>,
+    pub systemctl: Arc<Systemctl>,
+    pub systemd_status_manager: Arc<SystemdStatusManager>,
 }
 
-#[derive(Component)]
-#[shaku(interface = CommandRunner)]
-pub struct CommandRunnerImpl {
-    #[shaku(inject)]
-    config: Arc<dyn Config>,
-    #[shaku(inject)]
-    systemctl: Arc<dyn Systemctl>,
-    #[shaku(inject)]
-    systemd_status_manager: Arc<dyn SystemdStatusManager>,
-}
-
-impl CommandRunnerImpl {
+impl CommandRunner {
     fn ensure_allowed(&self, unit: &String, command: Command) -> Result<(), CommandRunnerError> {
         if self.config.units[&command].contains(unit) {
             Ok(())
@@ -75,9 +63,8 @@ impl CommandRunnerImpl {
     }
 }
 
-#[async_trait]
-impl CommandRunner for CommandRunnerImpl {
-    async fn run(&self, command: &UserCommand) -> Result<String, CommandRunnerError> {
+impl CommandRunner {
+    pub async fn run(&self, command: &UserCommand) -> Result<String, CommandRunnerError> {
         match command {
             UserCommand::Start { unit } => {
                 self.ensure_allowed(unit, Command::Start)?;

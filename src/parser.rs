@@ -1,33 +1,23 @@
 use crate::{
     command::UserCommand,
-    config::{Command, CommandType, Config},
+    config::{Command, CommandType, SystemctlBotConfig},
 };
 use serenity::all::{CommandDataOption, CommandDataOptionValue, CommandInteraction};
-use shaku::{Component, Interface};
 use std::sync::Arc;
 
-pub trait Parser: Interface {
-    fn parse(&self, interaction: &CommandInteraction) -> Option<UserCommand>;
+pub struct Parser {
+    pub config: Arc<SystemctlBotConfig>,
 }
 
-#[derive(Component)]
-#[shaku(interface = Parser)]
-pub struct ParserImpl {
-    #[shaku(inject)]
-    config: Arc<dyn Config>,
-}
-
-impl ParserImpl {
+impl Parser {
     fn get_unit_from_opt(&self, option: &CommandDataOption) -> Option<String> {
         match &option.value {
             CommandDataOptionValue::String(name) => Some(name.clone()),
             _ => None,
         }
     }
-}
 
-impl Parser for ParserImpl {
-    fn parse(&self, interaction: &CommandInteraction) -> Option<UserCommand> {
+    pub fn parse(&self, interaction: &CommandInteraction) -> Option<UserCommand> {
         let (name, options) = match self.config.command_type {
             CommandType::Single => {
                 let sub = interaction.data.options.get(0)?;
