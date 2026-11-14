@@ -2,7 +2,6 @@ use crate::builder::build_commands;
 use crate::command::CommandRunner;
 use crate::config::SystemctlBotConfig;
 use crate::parser::Parser;
-use crate::status_monitor::StatusMonitor;
 use async_trait::async_trait;
 use serenity::all::{
     Context, CreateInteractionResponse, CreateInteractionResponseFollowup,
@@ -14,7 +13,6 @@ pub struct Handler {
     pub config: Arc<SystemctlBotConfig>,
     pub parser: Parser,
     pub command_runner: CommandRunner,
-    pub status_monitor: StatusMonitor,
 }
 
 #[async_trait]
@@ -28,8 +26,6 @@ impl EventHandler for Handler {
             )
             .await
             .unwrap();
-
-        self.status_monitor.monitor(ctx).await;
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {

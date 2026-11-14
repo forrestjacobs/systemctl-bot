@@ -3,22 +3,22 @@ mod command;
 mod config;
 mod handler;
 mod parser;
-mod status_monitor;
-mod systemctl;
-mod systemd_status;
+mod status_handler;
+mod systemd;
 
 use std::sync::Arc;
 
 use serenity::all::{Client, GatewayIntents};
 
 use crate::{
-    command::CommandRunner, handler::Handler, parser::Parser, status_monitor::StatusMonitor,
-    systemctl::Systemctl,
+    command::CommandRunner, config::Command, handler::Handler, parser::Parser,
+    status_handler::StatusHandler, systemd::Systemd,
 };
 
 #[tokio::main]
 async fn main() {
     let config = Arc::new(config::build());
+    let systemd = Arc::new(Systemd::new().await);
 
     Client::builder(
         config.discord_token.clone(),
@@ -32,12 +32,12 @@ async fn main() {
         },
         command_runner: CommandRunner {
             config: Arc::clone(&config),
-            systemctl: Systemctl,
+            systemd: Arc::clone(&systemd),
         },
-        status_monitor: StatusMonitor {
-            config: Arc::clone(&config),
-            systemd_status_manager: systemd_status::build().await.unwrap(),
-        },
+    })
+    .event_handler(StatusHandler {
+        systemd,
+        units: config.units[&Command::Status].clone(),
     })
     .await
     .unwrap()

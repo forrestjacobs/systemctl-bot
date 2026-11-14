@@ -1,5 +1,5 @@
 use crate::config::{Command, SystemctlBotConfig};
-use crate::systemctl::{Systemctl, SystemctlError};
+use crate::systemd::{Systemd, SystemdCommand, SystemdRunError};
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -13,16 +13,14 @@ pub enum UserCommand {
 
 #[derive(Debug)]
 pub enum CommandRunnerError {
-    SystemctlError(SystemctlError),
-    ZbusError(zbus::Error),
+    SystemdError(SystemdRunError),
     NotAllowed,
 }
 
 impl Display for CommandRunnerError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            CommandRunnerError::SystemctlError(e) => write!(f, "{}", e),
-            CommandRunnerError::ZbusError(e) => write!(f, "{}", e),
+            CommandRunnerError::SystemdError(e) => write!(f, "{}", e),
             CommandRunnerError::NotAllowed => {
                 write!(f, "Command is not allowed")
             }
@@ -32,21 +30,15 @@ impl Display for CommandRunnerError {
 
 impl Error for CommandRunnerError {}
 
-impl From<SystemctlError> for CommandRunnerError {
-    fn from(error: SystemctlError) -> Self {
-        CommandRunnerError::SystemctlError(error)
-    }
-}
-
-impl From<zbus::Error> for CommandRunnerError {
-    fn from(error: zbus::Error) -> Self {
-        CommandRunnerError::ZbusError(error)
+impl From<SystemdRunError> for CommandRunnerError {
+    fn from(error: SystemdRunError) -> Self {
+        CommandRunnerError::SystemdError(error)
     }
 }
 
 pub struct CommandRunner {
     pub config: Arc<SystemctlBotConfig>,
-    pub systemctl: Systemctl,
+    pub systemd: Arc<Systemd>,
 }
 
 impl CommandRunner {
@@ -64,17 +56,17 @@ impl CommandRunner {
         match command {
             UserCommand::Start { unit } => {
                 self.ensure_allowed(unit, Command::Start)?;
-                self.systemctl.start(unit).await?;
+                self.systemd.run(&SystemdCommand::Start, unit).await?;
                 Ok(format!("Started {}", unit))
             }
             UserCommand::Stop { unit } => {
                 self.ensure_allowed(unit, Command::Stop)?;
-                self.systemctl.stop(unit).await?;
+                self.systemd.run(&SystemdCommand::Stop, unit).await?;
                 Ok(format!("Stopped {}", unit))
             }
             UserCommand::Restart { unit } => {
                 self.ensure_allowed(unit, Command::Restart)?;
-                self.systemctl.restart(unit).await?;
+                self.systemd.run(&SystemdCommand::Restart, unit).await?;
                 Ok(format!("Restarted {}", unit))
             }
         }
