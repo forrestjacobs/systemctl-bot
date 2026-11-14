@@ -46,7 +46,7 @@ impl From<zbus::Error> for CommandRunnerError {
 
 pub struct CommandRunner {
     pub config: Arc<SystemctlBotConfig>,
-    pub systemctl: Arc<Systemctl>,
+    pub systemctl: Systemctl,
 }
 
 impl CommandRunner {

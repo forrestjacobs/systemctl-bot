@@ -12,9 +12,9 @@ use std::sync::Arc;
 
 pub struct Handler {
     pub config: Arc<SystemctlBotConfig>,
-    pub parser: Arc<Parser>,
-    pub command_runner: Arc<CommandRunner>,
-    pub status_monitor: Arc<StatusMonitor>,
+    pub parser: Parser,
+    pub command_runner: CommandRunner,
+    pub status_monitor: StatusMonitor,
 }
 
 #[async_trait]

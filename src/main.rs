@@ -20,33 +20,24 @@ use crate::{
 async fn main() {
     let config = Arc::new(config::build());
 
-    let systemctl = Arc::new(Systemctl);
-
-    let systemd_status_manager = Arc::new(systemd_status::build().await.unwrap());
-
-    let parser = Arc::new(Parser {
-        config: Arc::clone(&config),
-    });
-    let command_runner = Arc::new(CommandRunner {
-        config: Arc::clone(&config),
-        systemctl,
-    });
-
-    let status_monitor = Arc::new(StatusMonitor {
-        config: Arc::clone(&config),
-        systemd_status_manager,
-    });
-
     Client::builder(
         config.discord_token.clone(),
         GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
     )
     .application_id(ApplicationId::new(config.application_id))
     .event_handler(Handler {
-        config,
-        parser,
-        command_runner,
-        status_monitor,
+        config: Arc::clone(&config),
+        parser: Parser {
+            config: Arc::clone(&config),
+        },
+        command_runner: CommandRunner {
+            config: Arc::clone(&config),
+            systemctl: Systemctl,
+        },
+        status_monitor: StatusMonitor {
+            config: Arc::clone(&config),
+            systemd_status_manager: systemd_status::build().await.unwrap(),
+        },
     })
     .await
     .unwrap()

@@ -9,7 +9,7 @@ use zbus::PropertyStream;
 
 pub struct StatusMonitor {
     pub config: Arc<SystemctlBotConfig>,
-    pub systemd_status_manager: Arc<SystemdStatusManager>,
+    pub systemd_status_manager: SystemdStatusManager,
 }
 
 impl StatusMonitor {
