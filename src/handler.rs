@@ -6,7 +6,7 @@ use crate::status_monitor::StatusMonitor;
 use async_trait::async_trait;
 use serenity::all::{
     Context, CreateInteractionResponse, CreateInteractionResponseFollowup,
-    CreateInteractionResponseMessage, EventHandler, GuildId, Interaction, Ready,
+    CreateInteractionResponseMessage, EventHandler, Interaction, Ready,
 };
 use std::sync::Arc;
 
@@ -20,7 +20,8 @@ pub struct Handler {
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, _ready: Ready) {
-        GuildId::new(self.config.guild_id)
+        self.config
+            .guild_id
             .set_commands(
                 &ctx.http,
                 build_commands(&self.config.units, &self.config.command_type),

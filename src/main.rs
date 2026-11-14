@@ -9,7 +9,7 @@ mod systemd_status;
 
 use std::sync::Arc;
 
-use serenity::all::{ApplicationId, Client, GatewayIntents};
+use serenity::all::{Client, GatewayIntents};
 
 use crate::{
     command::CommandRunner, handler::Handler, parser::Parser, status_monitor::StatusMonitor,
@@ -24,7 +24,7 @@ async fn main() {
         config.discord_token.clone(),
         GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
     )
-    .application_id(ApplicationId::new(config.application_id))
+    .application_id(config.application_id)
     .event_handler(Handler {
         config: Arc::clone(&config),
         parser: Parser {

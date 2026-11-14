@@ -1,5 +1,6 @@
 use clap::Parser;
 use serde::{self, Deserialize, Deserializer};
+use serenity::all::{ApplicationId, GuildId};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Hash, PartialEq, Eq)]
@@ -18,17 +19,12 @@ enum UnitPermission {
     Status,
 }
 
-#[derive(Deserialize, Hash, PartialEq, Eq)]
+#[derive(Deserialize, Default, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CommandType {
+    #[default]
     Single,
     Multiple,
-}
-
-impl Default for CommandType {
-    fn default() -> Self {
-        CommandType::Single
-    }
 }
 
 #[derive(Deserialize)]
@@ -40,9 +36,9 @@ struct Unit {
 
 #[derive(Deserialize)]
 pub struct SystemctlBotConfig {
-    pub application_id: u64,
+    pub application_id: ApplicationId,
     pub discord_token: String,
-    pub guild_id: u64,
+    pub guild_id: GuildId,
     #[serde(default)]
     pub command_type: CommandType,
     #[serde(deserialize_with = "deserialize_units")]
