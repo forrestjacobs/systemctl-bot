@@ -3,7 +3,7 @@ use serde::{self, Deserialize, Deserializer};
 use serenity::all::{ApplicationId, GuildId};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Debug, Hash, PartialEq, Eq)]
 pub enum Command {
     Start,
     Stop,
@@ -18,7 +18,7 @@ enum UnitPermission {
     Status,
 }
 
-#[derive(Deserialize, Default, Hash, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Default, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CommandType {
     #[default]
@@ -35,12 +35,13 @@ struct Unit {
 
 pub type CommandUnits = HashMap<Command, Vec<String>>;
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct UnitCollection {
     pub command_units: CommandUnits,
     pub status_units: Vec<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 pub struct SystemctlBotConfig {
     pub application_id: ApplicationId,
     pub discord_token: String,
@@ -69,7 +70,7 @@ fn get_units_with_perms<const N: usize>(
     let perms = HashSet::from(perms);
     units
         .iter()
-        .filter(|u| u.permissions.is_subset(&perms))
+        .filter(|u| perms.is_subset(&u.permissions))
         .map(|u| u.name.clone())
         .collect()
 }
@@ -114,4 +115,56 @@ pub fn build() -> SystemctlBotConfig {
         .expect("Unable to read config")
         .try_deserialize()
         .expect("Unable to parse config")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_basic_config() {
+        let result: SystemctlBotConfig = config::Config::builder()
+            .add_source(config::File::from_str(
+                r#"
+                application_id = 88888888
+                guild_id = 12345678
+                discord_token = "88888888.88888888.88888888"
+
+                [[units]]
+                name = "restartable"
+                permissions = ["start", "stop"]
+
+                [[units]]
+                name = "reportable"
+                permissions = ["status"]
+                "#,
+                config::FileFormat::Toml,
+            ))
+            .build()
+            .unwrap()
+            .try_deserialize()
+            .unwrap();
+        assert_eq!(
+            result,
+            SystemctlBotConfig {
+                application_id: ApplicationId::new(88888888),
+                guild_id: GuildId::new(12345678),
+                discord_token: "88888888.88888888.88888888".to_string(),
+                command_type: CommandType::Single,
+                units: UnitCollection {
+                    command_units: HashMap::from([
+                        (Command::Start, vec!["restartable.service".to_string()]),
+                        (Command::Stop, vec!["restartable.service".to_string()]),
+                        (Command::Restart, vec!["restartable.service".to_string()]),
+                    ]),
+                    status_units: vec!["reportable.service".to_string()],
+                }
+            }
+        );
+    }
+
+    // TODO: Test missing
+    // TODO: Test defaults for command type
+    // TODO: Test non-.service units
+    // TODO: Test missing units
 }
