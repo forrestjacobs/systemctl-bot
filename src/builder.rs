@@ -51,16 +51,6 @@ where
         };
         register("restart", "Restarts units", option);
     }
-
-    let checkable_units = &units[&Command::Status];
-    if !checkable_units.is_empty() {
-        let option = UnitOption {
-            units: checkable_units,
-            description: "The unit to check",
-            required: false,
-        };
-        register("status", "Checks units' status", option);
-    }
 }
 
 pub fn build_commands<'a>(

@@ -7,7 +7,6 @@ use std::collections::{HashMap, HashSet};
 pub enum Command {
     Start,
     Stop,
-    Status,
     Restart,
 }
 
@@ -34,6 +33,13 @@ struct Unit {
     permissions: HashSet<UnitPermission>,
 }
 
+pub type CommandUnits = HashMap<Command, Vec<String>>;
+
+pub struct UnitCollection {
+    pub command_units: CommandUnits,
+    pub status_units: Vec<String>,
+}
+
 #[derive(Deserialize)]
 pub struct SystemctlBotConfig {
     pub application_id: ApplicationId,
@@ -42,7 +48,7 @@ pub struct SystemctlBotConfig {
     #[serde(default)]
     pub command_type: CommandType,
     #[serde(deserialize_with = "deserialize_units")]
-    pub units: HashMap<Command, Vec<String>>,
+    pub units: UnitCollection,
 }
 
 fn deserialize_unit_name<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -68,30 +74,28 @@ fn get_units_with_perms<const N: usize>(
         .collect()
 }
 
-fn deserialize_units<'de, D>(deserializer: D) -> Result<HashMap<Command, Vec<String>>, D::Error>
+fn deserialize_units<'de, D>(deserializer: D) -> Result<UnitCollection, D::Error>
 where
     D: Deserializer<'de>,
 {
     let units: Vec<Unit> = Vec::deserialize(deserializer)?;
-    let units = HashMap::from([
-        (
-            Command::Start,
-            get_units_with_perms(&units, [UnitPermission::Start]),
-        ),
-        (
-            Command::Stop,
-            get_units_with_perms(&units, [UnitPermission::Stop]),
-        ),
-        (
-            Command::Restart,
-            get_units_with_perms(&units, [UnitPermission::Start, UnitPermission::Stop]),
-        ),
-        (
-            Command::Status,
-            get_units_with_perms(&units, [UnitPermission::Status]),
-        ),
-    ]);
-    Ok(units)
+    Ok(UnitCollection {
+        command_units: HashMap::from([
+            (
+                Command::Start,
+                get_units_with_perms(&units, [UnitPermission::Start]),
+            ),
+            (
+                Command::Stop,
+                get_units_with_perms(&units, [UnitPermission::Stop]),
+            ),
+            (
+                Command::Restart,
+                get_units_with_perms(&units, [UnitPermission::Start, UnitPermission::Stop]),
+            ),
+        ]),
+        status_units: get_units_with_perms(&units, [UnitPermission::Status]),
+    })
 }
 
 #[derive(Parser, Debug)]

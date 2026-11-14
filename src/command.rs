@@ -43,7 +43,7 @@ pub struct CommandRunner {
 
 impl CommandRunner {
     fn ensure_allowed(&self, unit: &String, command: Command) -> Result<(), CommandRunnerError> {
-        if self.config.units[&command].contains(unit) {
+        if self.config.units.command_units[&command].contains(unit) {
             Ok(())
         } else {
             Err(CommandRunnerError::NotAllowed)

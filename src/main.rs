@@ -11,8 +11,8 @@ use std::sync::Arc;
 use serenity::all::{Client, GatewayIntents};
 
 use crate::{
-    command::CommandRunner, config::Command, handler::Handler, parser::Parser,
-    status_handler::StatusHandler, systemd::Systemd,
+    command::CommandRunner, handler::Handler, parser::Parser, status_handler::StatusHandler,
+    systemd::Systemd,
 };
 
 #[tokio::main]
@@ -37,7 +37,7 @@ async fn main() {
     })
     .event_handler(StatusHandler {
         systemd,
-        units: config.units[&Command::Status].clone(),
+        units: config.units.status_units.clone(),
     })
     .await
     .unwrap()

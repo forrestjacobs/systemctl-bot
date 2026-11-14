@@ -22,7 +22,7 @@ impl EventHandler for Handler {
             .guild_id
             .set_commands(
                 &ctx.http,
-                build_commands(&self.config.units, &self.config.command_type),
+                build_commands(&self.config.units.command_units, &self.config.command_type),
             )
             .await
             .unwrap();
