@@ -1,6 +1,6 @@
 use crate::{
     command::UserCommand,
-    config::{Command, CommandType, SystemctlBotConfig},
+    config::{CommandType, SystemctlBotConfig},
 };
 use serenity::all::{CommandDataOption, CommandDataOptionValue, CommandInteraction};
 use std::sync::Arc;
@@ -38,14 +38,6 @@ impl Parser {
             }),
             "restart" => Some(UserCommand::Restart {
                 unit: self.get_unit_from_opt(options.get(0)?)?,
-            }),
-            "status" => Some(match options.get(0) {
-                Some(option) => UserCommand::SingleStatus {
-                    unit: self.get_unit_from_opt(option)?,
-                },
-                None => UserCommand::MultiStatus {
-                    units: self.config.units[&Command::Status].clone(),
-                },
             }),
             _ => None,
         }

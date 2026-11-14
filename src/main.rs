@@ -30,7 +30,6 @@ async fn main() {
     let command_runner = Arc::new(CommandRunner {
         config: Arc::clone(&config),
         systemctl,
-        systemd_status_manager: Arc::clone(&systemd_status_manager),
     });
 
     let status_monitor = Arc::new(StatusMonitor {

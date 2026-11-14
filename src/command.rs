@@ -1,6 +1,5 @@
 use crate::config::{Command, SystemctlBotConfig};
 use crate::systemctl::{Systemctl, SystemctlError};
-use crate::systemd_status::SystemdStatusManager;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -10,8 +9,6 @@ pub enum UserCommand {
     Start { unit: String },
     Stop { unit: String },
     Restart { unit: String },
-    SingleStatus { unit: String },
-    MultiStatus { units: Vec<String> },
 }
 
 #[derive(Debug)]
@@ -50,7 +47,6 @@ impl From<zbus::Error> for CommandRunnerError {
 pub struct CommandRunner {
     pub config: Arc<SystemctlBotConfig>,
     pub systemctl: Arc<Systemctl>,
-    pub systemd_status_manager: Arc<SystemdStatusManager>,
 }
 
 impl CommandRunner {
@@ -80,32 +76,6 @@ impl CommandRunner {
                 self.ensure_allowed(unit, Command::Restart)?;
                 self.systemctl.restart(unit).await?;
                 Ok(format!("Restarted {}", unit))
-            }
-            UserCommand::SingleStatus { unit } => {
-                self.ensure_allowed(unit, Command::Status)?;
-                Ok(self.systemd_status_manager.status(unit.as_str()).await?)
-            }
-            UserCommand::MultiStatus { units } => {
-                for unit in units {
-                    self.ensure_allowed(unit, Command::Status)?;
-                }
-
-                let statuses = self
-                    .systemd_status_manager
-                    .statuses(units.iter().map(|u| u.as_str()))
-                    .await;
-                let status_lines = statuses
-                    .into_iter()
-                    .map(|(unit, status)| (unit, status.unwrap_or_else(|err| format!("{}", err))))
-                    .filter(|(_, status)| status != "inactive")
-                    .map(|(unit, status)| format!("{}: {}", unit, status))
-                    .collect::<Vec<String>>();
-                let response = if status_lines.is_empty() {
-                    String::from("Nothing is active")
-                } else {
-                    status_lines.join("\n")
-                };
-                Ok(response)
             }
         }
     }
