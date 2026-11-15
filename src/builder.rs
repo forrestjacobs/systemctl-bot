@@ -8,7 +8,7 @@ struct UnitOption<'a> {
     required: bool,
 }
 
-fn setup_unit_option<'a>(unit_option: &'a UnitOption<'_>) -> CreateCommandOption {
+fn setup_unit_option(unit_option: &UnitOption<'_>) -> CreateCommandOption {
     let option =
         CreateCommandOption::new(CommandOptionType::String, "unit", unit_option.description)
             .required(unit_option.required);
@@ -53,7 +53,7 @@ where
     }
 }
 
-pub fn build_commands<'a>(
+pub fn build_commands(
     units: &HashMap<Command, Vec<String>>,
     command_type: &CommandType,
 ) -> Vec<CreateCommand> {

@@ -20,7 +20,7 @@ impl Parser {
     pub fn parse(&self, interaction: &CommandInteraction) -> Option<UserCommand> {
         let (name, options) = match self.config.command_type {
             CommandType::Single => {
-                let sub = interaction.data.options.get(0)?;
+                let sub = interaction.data.options.first()?;
                 if let CommandDataOptionValue::SubCommand(opts) = &sub.value {
                     (&sub.name, opts)
                 } else {
@@ -31,13 +31,13 @@ impl Parser {
         };
         match name.as_str() {
             "start" => Some(UserCommand::Start {
-                unit: self.get_unit_from_opt(options.get(0)?)?,
+                unit: self.get_unit_from_opt(options.first()?)?,
             }),
             "stop" => Some(UserCommand::Stop {
-                unit: self.get_unit_from_opt(options.get(0)?)?,
+                unit: self.get_unit_from_opt(options.first()?)?,
             }),
             "restart" => Some(UserCommand::Restart {
-                unit: self.get_unit_from_opt(options.get(0)?)?,
+                unit: self.get_unit_from_opt(options.first()?)?,
             }),
             _ => None,
         }
