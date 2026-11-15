@@ -31,7 +31,7 @@ impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::Command(interaction) = interaction {
             match self.parser.parse(&interaction) {
-                Some(command) => {
+                Some((command, unit)) => {
                     interaction
                         .create_response(
                             &ctx.http,
@@ -41,7 +41,7 @@ impl EventHandler for Handler {
                         )
                         .await
                         .unwrap();
-                    let response_content = match self.command_runner.run(&command).await {
+                    let response_content = match self.command_runner.run(&command, &unit).await {
                         Ok(value) => value,
                         Err(value) => value.to_string(),
                     };

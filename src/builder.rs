@@ -1,4 +1,4 @@
-use crate::config::{Command, CommandType};
+use crate::{command::Command, config::CommandType};
 use serenity::all::{CommandOptionType, CreateCommand, CreateCommandOption};
 use std::collections::HashMap;
 

@@ -3,12 +3,7 @@ use serde::{self, Deserialize, Deserializer};
 use serenity::all::{ApplicationId, GuildId};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub enum Command {
-    Start,
-    Stop,
-    Restart,
-}
+use crate::command::Command;
 
 #[derive(Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

@@ -1,5 +1,5 @@
 use crate::{
-    command::UserCommand,
+    command::Command,
     config::{CommandType, SystemctlBotConfig},
 };
 use serenity::all::{CommandDataOption, CommandDataOptionValue, CommandInteraction};
@@ -17,7 +17,7 @@ impl Parser {
         }
     }
 
-    pub fn parse(&self, interaction: &CommandInteraction) -> Option<UserCommand> {
+    pub fn parse(&self, interaction: &CommandInteraction) -> Option<(Command, String)> {
         let (name, options) = match self.config.command_type {
             CommandType::Single => {
                 let sub = interaction.data.options.first()?;
@@ -29,17 +29,14 @@ impl Parser {
             }
             CommandType::Multiple => (&interaction.data.name, &interaction.data.options),
         };
-        match name.as_str() {
-            "start" => Some(UserCommand::Start {
-                unit: self.get_unit_from_opt(options.first()?)?,
-            }),
-            "stop" => Some(UserCommand::Stop {
-                unit: self.get_unit_from_opt(options.first()?)?,
-            }),
-            "restart" => Some(UserCommand::Restart {
-                unit: self.get_unit_from_opt(options.first()?)?,
-            }),
-            _ => None,
-        }
+        Some((
+            match name.as_str() {
+                "start" => Command::Start,
+                "stop" => Command::Stop,
+                "restart" => Command::Restart,
+                _ => return None,
+            },
+            self.get_unit_from_opt(options.first()?)?,
+        ))
     }
 }

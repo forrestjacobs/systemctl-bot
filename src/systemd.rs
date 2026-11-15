@@ -9,6 +9,8 @@ use zbus_systemd::{
     zbus::{self, Connection},
 };
 
+use crate::command::Command;
+
 #[derive(Debug)]
 pub enum SystemdRunError {
     UnexpectedJobResult(String),
@@ -34,23 +36,17 @@ impl From<zbus::Error> for SystemdRunError {
 
 impl Error for SystemdRunError {}
 
-pub enum SystemdCommand {
-    Start,
-    Stop,
-    Restart,
-}
-
 async fn run_internal(
     client: &ManagerProxy<'static>,
-    command: &SystemdCommand,
+    command: &Command,
     unit: &str,
 ) -> zbus::Result<OwnedObjectPath> {
     let unit = unit.to_string();
     let mode = "replace".to_string();
     match command {
-        SystemdCommand::Start => client.start_unit(unit, mode).await,
-        SystemdCommand::Stop => client.stop_unit(unit, mode).await,
-        SystemdCommand::Restart => client.restart_unit(unit, mode).await,
+        Command::Start => client.start_unit(unit, mode).await,
+        Command::Stop => client.stop_unit(unit, mode).await,
+        Command::Restart => client.restart_unit(unit, mode).await,
     }
 }
 
@@ -102,7 +98,7 @@ impl Systemd {
         }
     }
 
-    pub async fn run(&self, command: &SystemdCommand, unit: &str) -> Result<(), SystemdRunError> {
+    pub async fn run(&self, command: &Command, unit: &str) -> Result<(), SystemdRunError> {
         let job_stream = self.client.receive_job_removed().await?;
         let path = run_internal(&self.client, command, unit).await?;
         wait_for_job(Box::pin(job_stream), path).await

@@ -1,14 +1,15 @@
-use crate::config::{Command, SystemctlBotConfig};
-use crate::systemd::{Systemd, SystemdCommand, SystemdRunError};
+use crate::config::SystemctlBotConfig;
+use crate::systemd::{Systemd, SystemdRunError};
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-pub enum UserCommand {
-    Start { unit: String },
-    Stop { unit: String },
-    Restart { unit: String },
+#[derive(Debug, Hash, PartialEq, Eq)]
+pub enum Command {
+    Start,
+    Stop,
+    Restart,
 }
 
 #[derive(Debug)]
@@ -42,8 +43,11 @@ pub struct CommandRunner {
 }
 
 impl CommandRunner {
-    fn ensure_allowed(&self, unit: &String, command: Command) -> Result<(), CommandRunnerError> {
-        if self.config.units.command_units[&command].contains(unit) {
+    fn ensure_allowed(&self, command: &Command, unit: &str) -> Result<(), CommandRunnerError> {
+        if self.config.units.command_units[command]
+            .iter()
+            .any(|u| u == unit)
+        {
             Ok(())
         } else {
             Err(CommandRunnerError::NotAllowed)
@@ -52,23 +56,14 @@ impl CommandRunner {
 }
 
 impl CommandRunner {
-    pub async fn run(&self, command: &UserCommand) -> Result<String, CommandRunnerError> {
-        match command {
-            UserCommand::Start { unit } => {
-                self.ensure_allowed(unit, Command::Start)?;
-                self.systemd.run(&SystemdCommand::Start, unit).await?;
-                Ok(format!("Started {}", unit))
-            }
-            UserCommand::Stop { unit } => {
-                self.ensure_allowed(unit, Command::Stop)?;
-                self.systemd.run(&SystemdCommand::Stop, unit).await?;
-                Ok(format!("Stopped {}", unit))
-            }
-            UserCommand::Restart { unit } => {
-                self.ensure_allowed(unit, Command::Restart)?;
-                self.systemd.run(&SystemdCommand::Restart, unit).await?;
-                Ok(format!("Restarted {}", unit))
-            }
-        }
+    pub async fn run(&self, command: &Command, unit: &str) -> Result<String, CommandRunnerError> {
+        self.ensure_allowed(command, unit)?;
+        self.systemd.run(command, unit).await?;
+        let verb = match command {
+            Command::Start => "Started",
+            Command::Stop => "Stopped",
+            Command::Restart => "Restarted",
+        };
+        Ok(format!("{} {}", verb, unit))
     }
 }
