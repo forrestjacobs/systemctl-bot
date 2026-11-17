@@ -13,7 +13,7 @@ enum UnitPermission {
     Status,
 }
 
-#[derive(Debug, Deserialize, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Default, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CommandType {
     #[default]

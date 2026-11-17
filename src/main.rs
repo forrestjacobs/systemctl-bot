@@ -11,8 +11,8 @@ use std::sync::Arc;
 use serenity::all::{Client, GatewayIntents};
 
 use crate::{
-    command::CommandRunner, handler::Handler, parser::Parser, status_handler::StatusHandler,
-    systemd::Systemd,
+    builder::CommandBuilder, command::CommandRunner, handler::Handler, parser::Parser,
+    status_handler::StatusHandler, systemd::Systemd,
 };
 
 #[tokio::main]
@@ -25,8 +25,10 @@ async fn main() {
         GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
     )
     .application_id(config.application_id)
-    .event_handler(Handler {
+    .event_handler(CommandBuilder {
         config: Arc::clone(&config),
+    })
+    .event_handler(Handler {
         parser: Parser {
             config: Arc::clone(&config),
         },

@@ -5,7 +5,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-#[derive(Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Command {
     Start,
     Stop,

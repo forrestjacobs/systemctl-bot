@@ -1,6 +1,12 @@
-use crate::{command::Command, config::CommandType};
-use serenity::all::{CommandOptionType, CreateCommand, CreateCommandOption};
-use std::collections::HashMap;
+use crate::{
+    command::Command,
+    config::{CommandType, CommandUnits, SystemctlBotConfig},
+};
+use serenity::{
+    all::{CommandOptionType, Context, CreateCommand, CreateCommandOption, EventHandler, Ready},
+    async_trait,
+};
+use std::{collections::HashMap, sync::Arc};
 
 struct UnitOption<'a> {
     units: &'a Vec<String>,
@@ -53,10 +59,7 @@ where
     }
 }
 
-pub fn build_commands(
-    units: &HashMap<Command, Vec<String>>,
-    command_type: &CommandType,
-) -> Vec<CreateCommand> {
+pub fn build_commands(units: &CommandUnits, command_type: &CommandType) -> Vec<CreateCommand> {
     match command_type {
         CommandType::Single => {
             let mut options = Vec::new();
@@ -87,5 +90,23 @@ pub fn build_commands(
             });
             commands
         }
+    }
+}
+
+pub struct CommandBuilder {
+    pub config: Arc<SystemctlBotConfig>,
+}
+
+#[async_trait]
+impl EventHandler for CommandBuilder {
+    async fn ready(&self, ctx: Context, _data_about_bot: Ready) {
+        self.config
+            .guild_id
+            .set_commands(
+                &ctx.http,
+                build_commands(&self.config.units.command_units, &self.config.command_type),
+            )
+            .await
+            .expect("Unable to set commands");
     }
 }
