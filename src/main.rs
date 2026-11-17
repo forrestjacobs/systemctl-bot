@@ -1,8 +1,7 @@
 mod command;
 mod command_builder;
+mod command_handler;
 mod config;
-mod handler;
-mod parser;
 mod status_handler;
 mod systemd;
 
@@ -11,7 +10,7 @@ use std::sync::Arc;
 use serenity::all::{Client, GatewayIntents};
 
 use crate::{
-    command::CommandRunner, command_builder::CommandBuilder, handler::Handler, parser::Parser,
+    command_builder::CommandBuilder, command_handler::CommandHandler,
     status_handler::StatusHandler, systemd::Systemd,
 };
 
@@ -28,14 +27,9 @@ async fn main() {
     .event_handler(CommandBuilder {
         config: Arc::clone(&config),
     })
-    .event_handler(Handler {
-        parser: Parser {
-            config: Arc::clone(&config),
-        },
-        command_runner: CommandRunner {
-            config: Arc::clone(&config),
-            systemd: Arc::clone(&systemd),
-        },
+    .event_handler(CommandHandler {
+        config: Arc::clone(&config),
+        systemd: Arc::clone(&systemd),
     })
     .event_handler(StatusHandler {
         systemd,

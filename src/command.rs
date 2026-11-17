@@ -1,9 +1,8 @@
-use crate::config::SystemctlBotConfig;
-use crate::systemd::{Systemd, SystemdRunError};
-use std::error::Error;
-use std::fmt;
-use std::fmt::{Display, Formatter};
-use std::sync::Arc;
+use std::{
+    error::Error,
+    fmt::{self, Display, Formatter},
+    str::FromStr,
+};
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Command {
@@ -16,6 +15,29 @@ impl Command {
     pub const VALUES: [Self; 3] = [Self::Start, Self::Stop, Self::Restart];
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct UnexpectedCommandError(pub String);
+
+impl Display for UnexpectedCommandError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "Unexpected command {}", self.0)
+    }
+}
+
+impl Error for UnexpectedCommandError {}
+
+impl FromStr for Command {
+    type Err = UnexpectedCommandError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "start" => Ok(Self::Start),
+            "stop" => Ok(Self::Stop),
+            "restart" => Ok(Self::Restart),
+            v => Err(UnexpectedCommandError(v.to_string())),
+        }
+    }
+}
+
 impl Display for Command {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
@@ -26,58 +48,33 @@ impl Display for Command {
     }
 }
 
-#[derive(Debug)]
-pub enum CommandRunnerError {
-    SystemdError(SystemdRunError),
-    NotAllowed,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl Display for CommandRunnerError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            CommandRunnerError::SystemdError(e) => write!(f, "{}", e),
-            CommandRunnerError::NotAllowed => {
-                write!(f, "Command is not allowed")
-            }
-        }
+    #[test]
+    fn display_unexpected_command_error() {
+        assert_eq!(
+            UnexpectedCommandError("recombobulate".to_string()).to_string(),
+            "Unexpected command recombobulate"
+        );
     }
-}
 
-impl Error for CommandRunnerError {}
-
-impl From<SystemdRunError> for CommandRunnerError {
-    fn from(error: SystemdRunError) -> Self {
-        CommandRunnerError::SystemdError(error)
+    #[test]
+    fn command_from_str() {
+        assert_eq!(Command::from_str("start"), Ok(Command::Start));
+        assert_eq!(Command::from_str("stop"), Ok(Command::Stop));
+        assert_eq!(Command::from_str("restart"), Ok(Command::Restart));
+        assert_eq!(
+            Command::from_str("recombobulate"),
+            Err(UnexpectedCommandError("recombobulate".to_string()))
+        );
     }
-}
 
-pub struct CommandRunner {
-    pub config: Arc<SystemctlBotConfig>,
-    pub systemd: Arc<Systemd>,
-}
-
-impl CommandRunner {
-    fn ensure_allowed(&self, command: &Command, unit: &str) -> Result<(), CommandRunnerError> {
-        if self.config.units.command_units[command]
-            .iter()
-            .any(|u| u == unit)
-        {
-            Ok(())
-        } else {
-            Err(CommandRunnerError::NotAllowed)
-        }
-    }
-}
-
-impl CommandRunner {
-    pub async fn run(&self, command: &Command, unit: &str) -> Result<String, CommandRunnerError> {
-        self.ensure_allowed(command, unit)?;
-        self.systemd.run(command, unit).await?;
-        let verb = match command {
-            Command::Start => "Started",
-            Command::Stop => "Stopped",
-            Command::Restart => "Restarted",
-        };
-        Ok(format!("{} {}", verb, unit))
+    #[test]
+    fn display_command() {
+        assert_eq!(Command::Start.to_string(), "start");
+        assert_eq!(Command::Stop.to_string(), "stop");
+        assert_eq!(Command::Restart.to_string(), "restart");
     }
 }
