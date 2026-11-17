@@ -6,8 +6,8 @@ edition = "2021"
 publish = false
 
 [dependencies]
-async-trait = "0.1.86"
 futures = "0.3"
+mockall = "0.15"
 tokio-stream = "0.1"
 
 [dependencies.clap]
@@ -26,7 +26,7 @@ features = ["derive"]
 [dependencies.serenity]
 version = "0.12"
 default-features = false
-features = ["cache", "client", "gateway", "model", "rustls_backend", "unstable_discord_api"]
+features = ["cache", "client", "gateway", "model", "rustls_backend"]
 
 [dependencies.tokio]
 version = "1.18"
@@ -35,3 +35,6 @@ features = ["rt-multi-thread"]
 [dependencies.zbus_systemd]
 version = "0.26201"
 features = ["systemd1"]
+
+[dev-dependencies]
+async-stream = "0.3"

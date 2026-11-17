@@ -1,4 +1,6 @@
 use futures::{Stream, StreamExt};
+use mockall::automock;
+use serenity::async_trait;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::pin::Pin;
@@ -78,14 +80,12 @@ async fn active_state_stream_internal(
     Box::pin(stream.then(async |e| e.get().await))
 }
 
-pub struct Systemd {
+pub struct SystemdImpl {
     conn: Connection,
     client: ManagerProxy<'static>,
 }
 
-pub type StatusStream = dyn Stream<Item = zbus::Result<String>> + Send;
-
-impl Systemd {
+impl SystemdImpl {
     pub async fn new() -> Self {
         let conn = Connection::system()
             .await
@@ -97,14 +97,26 @@ impl Systemd {
             conn,
         }
     }
+}
 
-    pub async fn run(&self, command: &Command, unit: &str) -> Result<(), SystemdRunError> {
+pub type StatusStream = dyn Stream<Item = zbus::Result<String>> + Send;
+
+#[async_trait]
+#[automock]
+pub trait Systemd {
+    async fn run(&self, command: &Command, unit: &str) -> Result<(), SystemdRunError>;
+    async fn active_state_stream(&self, unit: &str) -> Pin<Box<StatusStream>>;
+}
+
+#[async_trait]
+impl Systemd for SystemdImpl {
+    async fn run(&self, command: &Command, unit: &str) -> Result<(), SystemdRunError> {
         let job_stream = self.client.receive_job_removed().await?;
         let path = run_internal(&self.client, command, unit).await?;
         wait_for_job(Box::pin(job_stream), path).await
     }
 
-    pub async fn active_state_stream(&self, unit: &str) -> Pin<Box<StatusStream>> {
+    async fn active_state_stream(&self, unit: &str) -> Pin<Box<StatusStream>> {
         active_state_stream_internal(&self.conn, &self.client, unit.to_string()).await
     }
 }

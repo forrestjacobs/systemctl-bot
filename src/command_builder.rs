@@ -1,16 +1,14 @@
+use serenity::all::{
+    CommandOptionType, Context, CreateCommand, CreateCommandOption, EventHandler, GuildId, Ready,
+};
+use serenity::async_trait;
+
 use crate::{
     command::Command,
     config::{CommandType, CommandUnits},
 };
-use serenity::{
-    all::{
-        CommandOptionType, Context, CreateCommand, CreateCommandOption, EventHandler, GuildId,
-        Ready,
-    },
-    async_trait,
-};
 
-pub fn build_commands(units: &CommandUnits, command_type: &CommandType) -> Vec<CreateCommand> {
+fn build_commands(command_type: &CommandType, units: &CommandUnits) -> Vec<CreateCommand> {
     let command_iter = Command::VALUES
         .iter()
         .filter(|command| !&units[command].is_empty())
@@ -72,8 +70,136 @@ pub struct CommandBuilder {
 impl EventHandler for CommandBuilder {
     async fn ready(&self, ctx: Context, _data_about_bot: Ready) {
         self.guild_id
-            .set_commands(&ctx.http, build_commands(self.units, &self.command_type))
+            .set_commands(&ctx.http, build_commands(&self.command_type, self.units))
             .await
             .expect("Unable to set commands");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use serenity::json::to_value;
+
+    use super::*;
+
+    fn units_fixture() -> CommandUnits {
+        HashMap::from([
+            (
+                Command::Start,
+                vec![
+                    "startable.service".to_string(),
+                    "restartable.service".to_string(),
+                ],
+            ),
+            (
+                Command::Stop,
+                vec![
+                    "stoppable.service".to_string(),
+                    "restartable.service".to_string(),
+                ],
+            ),
+            (Command::Restart, vec!["restartable.service".to_string()]),
+        ])
+    }
+
+    #[test]
+    fn build_single_command() {
+        let units = units_fixture();
+        assert_eq!(
+            to_value(build_commands(&CommandType::Single, &units)).unwrap(),
+            to_value(vec![CreateCommand::new("systemctl")
+                .description("Controls units")
+                .add_option(
+                    CreateCommandOption::new(CommandOptionType::SubCommand, "start", "Start units")
+                        .add_sub_option(
+                            CreateCommandOption::new(
+                                CommandOptionType::String,
+                                "unit",
+                                "The unit to start",
+                            )
+                            .required(true)
+                            .add_string_choice("startable", "startable.service")
+                            .add_string_choice("restartable", "restartable.service")
+                        )
+                )
+                .add_option(
+                    CreateCommandOption::new(CommandOptionType::SubCommand, "stop", "Stop units")
+                        .add_sub_option(
+                            CreateCommandOption::new(
+                                CommandOptionType::String,
+                                "unit",
+                                "The unit to stop",
+                            )
+                            .required(true)
+                            .add_string_choice("stoppable", "stoppable.service")
+                            .add_string_choice("restartable", "restartable.service")
+                        )
+                )
+                .add_option(
+                    CreateCommandOption::new(
+                        CommandOptionType::SubCommand,
+                        "restart",
+                        "Restart units"
+                    )
+                    .add_sub_option(
+                        CreateCommandOption::new(
+                            CommandOptionType::String,
+                            "unit",
+                            "The unit to restart",
+                        )
+                        .required(true)
+                        .add_string_choice("restartable", "restartable.service")
+                    )
+                )])
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn build_multiple_commands() {
+        let units = units_fixture();
+        assert_eq!(
+            to_value(build_commands(&CommandType::Multiple, &units)).unwrap(),
+            to_value(vec![
+                CreateCommand::new("start")
+                .description("Start units")
+                .add_option(
+                    CreateCommandOption::new(
+                        CommandOptionType::String,
+                        "unit",
+                        "The unit to start",
+                    )
+                    .required(true)
+                    .add_string_choice("startable", "startable.service")
+                    .add_string_choice("restartable", "restartable.service")
+                ),
+                CreateCommand::new("stop")
+                .description("Stop units")
+                .add_option(
+                    CreateCommandOption::new(
+                        CommandOptionType::String,
+                        "unit",
+                        "The unit to stop",
+                    )
+                    .required(true)
+                    .add_string_choice("stoppable", "stoppable.service")
+                    .add_string_choice("restartable", "restartable.service")
+                ),
+                CreateCommand::new("restart")
+                .description("Restart units")
+                .add_option(
+                    CreateCommandOption::new(
+                        CommandOptionType::String,
+                        "unit",
+                        "The unit to restart",
+                    )
+                    .required(true)
+                    .add_string_choice("restartable", "restartable.service")
+                ),
+            ])
+            .unwrap()
+        );
     }
 }

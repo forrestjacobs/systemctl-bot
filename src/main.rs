@@ -1,3 +1,13 @@
+use serenity::all::{Client, ClientBuilder, GatewayIntents};
+
+use crate::{
+    command_builder::CommandBuilder,
+    command_handler::CommandHandler,
+    config::SystemctlBotConfig,
+    status_handler::StatusHandler,
+    systemd::{Systemd, SystemdImpl},
+};
+
 mod command;
 mod command_builder;
 mod command_handler;
@@ -5,18 +15,10 @@ mod config;
 mod status_handler;
 mod systemd;
 
-use serenity::all::{Client, GatewayIntents};
-
-use crate::{
-    command_builder::CommandBuilder, command_handler::CommandHandler,
-    status_handler::StatusHandler, systemd::Systemd,
-};
-
-#[tokio::main]
-async fn main() {
-    let config = config::build();
-    let systemd = Box::leak(Box::new(Systemd::new().await));
-
+fn make_builder<S: Systemd + Sync>(
+    config: SystemctlBotConfig,
+    systemd: &'static S,
+) -> ClientBuilder {
     let mut builder = Client::builder(
         config.discord_token,
         GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
@@ -46,6 +48,74 @@ async fn main() {
             units: status_units,
         });
     }
+    builder
+}
 
-    builder.await.unwrap().start().await.unwrap();
+#[tokio::main]
+async fn main() {
+    let config = config::build();
+    let systemd = Box::leak(Box::new(SystemdImpl::new().await));
+    make_builder(config, systemd)
+        .await
+        .expect("Unable to build the Discord client")
+        .start()
+        .await
+        .expect("Unable to start the Discord client");
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::mem::transmute;
+
+    use serenity::all::{ApplicationId, GuildId};
+
+    use crate::{
+        command::Command,
+        config::{CommandType, UnitCollection},
+        systemd::MockSystemd,
+    };
+
+    use super::*;
+
+    #[test]
+    fn basic_builder() {
+        let units = UnitCollection {
+            command_units: HashMap::from([
+                (Command::Start, vec!["restartable.service".to_string()]),
+                (Command::Stop, vec!["restartable.service".to_string()]),
+                (Command::Restart, vec!["restartable.service".to_string()]),
+            ]),
+            status_units: vec!["reportable.service".to_string()],
+        };
+
+        let config = SystemctlBotConfig {
+            application_id: ApplicationId::new(88888888),
+            guild_id: GuildId::new(12345678),
+            discord_token: "88888888.88888888.88888888".to_string(),
+            command_type: CommandType::Single,
+            units: units.clone(),
+        };
+        let systemd = Box::leak(Box::new(MockSystemd::new()));
+        let builder = make_builder(config, systemd);
+        assert_eq!(builder.get_token(), "Bot 88888888.88888888.88888888");
+        assert_eq!(
+            builder.get_application_id(),
+            Some(ApplicationId::new(88888888))
+        );
+
+        let handler = builder.get_event_handlers();
+        assert_eq!(handler.len(), 2);
+
+        let (command_handler, _): (&CommandHandler<MockSystemd>, *const ()) =
+            unsafe { transmute(handler[0].as_ref()) };
+        assert_eq!(command_handler.command_type, CommandType::Single);
+        assert!(std::ptr::eq(command_handler.systemd, systemd));
+        assert_eq!(command_handler.units, &units.command_units);
+
+        let (status_handler, _): (&StatusHandler<MockSystemd>, *const ()) =
+            unsafe { transmute(handler[1].as_ref()) };
+        assert!(std::ptr::eq(status_handler.systemd, systemd));
+        assert_eq!(status_handler.units, units.status_units);
+    }
 }

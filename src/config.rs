@@ -13,7 +13,7 @@ enum UnitPermission {
     Status,
 }
 
-#[derive(Clone, Debug, Deserialize, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CommandType {
     #[default]
@@ -30,7 +30,7 @@ struct Unit {
 
 pub type CommandUnits = HashMap<Command, Vec<String>>;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnitCollection {
     pub command_units: CommandUnits,
     pub status_units: Vec<String>,
