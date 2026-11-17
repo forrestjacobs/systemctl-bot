@@ -101,11 +101,11 @@ impl<S: Systemd> CommandHandler<'_, S> {
         let (command, unit) = match command_and_unit {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 let message = CreateInteractionResponseMessage::new().content("Invalid command");
                 let message = CreateInteractionResponse::Message(message);
                 if let Err(error) = responder.create_response(&interaction, message).await {
-                    eprintln!("Error responding: {}", error);
+                    eprintln!("Error responding: {error}");
                 }
                 return;
             }
@@ -116,13 +116,13 @@ impl<S: Systemd> CommandHandler<'_, S> {
             responder.create_response(&interaction, defer).await?;
 
             let content = match self.systemd.run(&command, unit).await {
-                Ok(_) => {
+                Ok(()) => {
                     let verb = match command {
                         Command::Start => "Started",
                         Command::Stop => "Stopped",
                         Command::Restart => "Restarted",
                     };
-                    format!("{} {}", verb, unit)
+                    format!("{verb} {unit}")
                 }
                 Err(error) => error.to_string(),
             };
@@ -133,7 +133,7 @@ impl<S: Systemd> CommandHandler<'_, S> {
         }
         .await;
         if let Err(error) = result {
-            eprint!("Error handling interaction: {}", error);
+            eprint!("Error handling interaction: {error}");
         }
     }
 }
@@ -144,7 +144,7 @@ impl<S: Systemd + Sync> EventHandler for CommandHandler<'_, S> {
         let handler = ResponseHandlerImpl {
             http: ctx.http.as_ref(),
         };
-        self.handle_interaction(&handler, interaction).await
+        self.handle_interaction(&handler, interaction).await;
     }
 }
 
@@ -206,7 +206,7 @@ mod tests {
         .await;
     }
 
-    fn make_command_interaction(data: json::Value) -> Interaction {
+    fn make_command_interaction(data: &json::Value) -> Interaction {
         from_value(json!({
             "type": InteractionType::Command,
             "id": 1,
@@ -245,7 +245,7 @@ mod tests {
         handler
             .handle_interaction(
                 &responder,
-                make_command_interaction(json!({
+                make_command_interaction(&json!({
                     "type": SerenityCommandType::ChatInput,
                     "id": 1,
                     "name": "systemctl",
@@ -257,7 +257,7 @@ mod tests {
         handler
             .handle_interaction(
                 &responder,
-                make_command_interaction(json!({
+                make_command_interaction(&json!({
                     "type": SerenityCommandType::ChatInput,
                     "id": 1,
                     "name": "systemctl",
@@ -275,7 +275,7 @@ mod tests {
         handler
             .handle_interaction(
                 &responder,
-                make_command_interaction(json!({
+                make_command_interaction(&json!({
                     "type": SerenityCommandType::ChatInput,
                     "id": 1,
                     "name": "start",
@@ -291,7 +291,7 @@ mod tests {
         handler
             .handle_interaction(
                 &responder,
-                make_command_interaction(json!({
+                make_command_interaction(&json!({
                     "type": SerenityCommandType::ChatInput,
                     "id": 1,
                     // Bad command name
@@ -307,7 +307,7 @@ mod tests {
         handler
             .handle_interaction(
                 &responder,
-                make_command_interaction(json!({
+                make_command_interaction(&json!({
                     "type": SerenityCommandType::ChatInput,
                     "id": 1,
                     "name": "start",
@@ -354,7 +354,7 @@ mod tests {
         }
         .handle_interaction(
             &responder,
-            make_command_interaction(json!({
+            make_command_interaction(&json!({
                 "type": SerenityCommandType::ChatInput,
                 "id": 1,
                 "name": "systemctl",

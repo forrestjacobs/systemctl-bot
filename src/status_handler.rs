@@ -14,9 +14,9 @@ pub struct StatusHandler<'a, S: Systemd> {
 }
 
 impl<S: Systemd> StatusHandler<'_, S> {
-    async fn activity_stream<'a>(
-        &'a self,
-    ) -> Pin<Box<impl Stream<Item = Option<ActivityData>> + use<'a, S>>> {
+    async fn activity_stream(
+        &self,
+    ) -> Pin<Box<impl Stream<Item = Option<ActivityData>> + use<'_, S>>> {
         let streams = StreamMap::from_iter(
             self.units.iter().zip(
                 join_all(

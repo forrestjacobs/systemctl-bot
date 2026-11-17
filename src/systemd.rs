@@ -23,9 +23,9 @@ pub enum SystemdRunError {
 impl Display for SystemdRunError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            SystemdRunError::UnexpectedJobResult(r) => write!(f, "Unexpected job result {}", r),
+            SystemdRunError::UnexpectedJobResult(r) => write!(f, "Unexpected job result {r}"),
             SystemdRunError::JobStreamClosed => write!(f, "Job stream closed"),
-            SystemdRunError::ZbusError(e) => write!(f, "{}", e),
+            SystemdRunError::ZbusError(e) => write!(f, "{e}"),
         }
     }
 }

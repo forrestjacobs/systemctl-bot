@@ -90,8 +90,8 @@ mod tests {
         };
 
         let config = SystemctlBotConfig {
-            application_id: ApplicationId::new(88888888),
-            guild_id: GuildId::new(12345678),
+            application_id: ApplicationId::new(88_888_888),
+            guild_id: GuildId::new(12_345_678),
             discord_token: "88888888.88888888.88888888".to_string(),
             command_type: CommandType::Single,
             units: units.clone(),
@@ -101,7 +101,7 @@ mod tests {
         assert_eq!(builder.get_token(), "Bot 88888888.88888888.88888888");
         assert_eq!(
             builder.get_application_id(),
-            Some(ApplicationId::new(88888888))
+            Some(ApplicationId::new(88_888_888))
         );
 
         let handler = builder.get_event_handlers();

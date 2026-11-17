@@ -18,14 +18,14 @@ fn build_commands(command_type: &CommandType, units: &CommandUnits) -> Vec<Creat
             let description = {
                 let mut capitalized_name = name.clone();
                 capitalized_name[0..1].make_ascii_uppercase();
-                format!("{} units", capitalized_name)
+                format!("{capitalized_name} units")
             };
 
             let option = {
                 let base = CreateCommandOption::new(
                     CommandOptionType::String,
                     "unit",
-                    format!("The unit to {}", name),
+                    format!("The unit to {name}"),
                 )
                 .required(true);
                 units[command].iter().fold(base, |option, unit| {
