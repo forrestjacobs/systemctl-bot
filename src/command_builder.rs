@@ -1,12 +1,14 @@
 use crate::{
     command::Command,
-    config::{CommandType, CommandUnits, SystemctlBotConfig},
+    config::{CommandType, CommandUnits},
 };
 use serenity::{
-    all::{CommandOptionType, Context, CreateCommand, CreateCommandOption, EventHandler, Ready},
+    all::{
+        CommandOptionType, Context, CreateCommand, CreateCommandOption, EventHandler, GuildId,
+        Ready,
+    },
     async_trait,
 };
-use std::sync::Arc;
 
 pub fn build_commands(units: &CommandUnits, command_type: &CommandType) -> Vec<CreateCommand> {
     let command_iter = Command::VALUES
@@ -61,18 +63,16 @@ pub fn build_commands(units: &CommandUnits, command_type: &CommandType) -> Vec<C
 }
 
 pub struct CommandBuilder {
-    pub config: Arc<SystemctlBotConfig>,
+    pub command_type: CommandType,
+    pub guild_id: GuildId,
+    pub units: &'static CommandUnits,
 }
 
 #[async_trait]
 impl EventHandler for CommandBuilder {
     async fn ready(&self, ctx: Context, _data_about_bot: Ready) {
-        self.config
-            .guild_id
-            .set_commands(
-                &ctx.http,
-                build_commands(&self.config.units.command_units, &self.config.command_type),
-            )
+        self.guild_id
+            .set_commands(&ctx.http, build_commands(self.units, &self.command_type))
             .await
             .expect("Unable to set commands");
     }

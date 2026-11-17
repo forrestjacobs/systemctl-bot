@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::{collections::HashMap, pin::Pin};
 
 use futures::future::{join_all, ready};
@@ -9,12 +8,12 @@ use tokio_stream::StreamMap;
 
 use crate::systemd::Systemd;
 
-pub struct StatusHandler {
-    pub systemd: Arc<Systemd>,
+pub struct StatusHandler<'a> {
+    pub systemd: &'a Systemd,
     pub units: Vec<String>,
 }
 
-impl StatusHandler {
+impl StatusHandler<'_> {
     async fn activity_stream<'a>(
         &'a self,
     ) -> Pin<Box<impl Stream<Item = Option<ActivityData>> + use<'a>>> {
@@ -53,7 +52,7 @@ impl StatusHandler {
 }
 
 #[async_trait]
-impl EventHandler for StatusHandler {
+impl EventHandler for StatusHandler<'_> {
     async fn ready(&self, ctx: Context, _data_about_bot: Ready) {
         let mut stream = self.activity_stream().await;
         while let Some(activity) = stream.next().await {

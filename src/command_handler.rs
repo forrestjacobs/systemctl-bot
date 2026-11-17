@@ -1,4 +1,4 @@
-use std::{str::FromStr, sync::Arc};
+use std::str::FromStr;
 
 use async_trait::async_trait;
 use serenity::all::{
@@ -9,16 +9,17 @@ use serenity::all::{
 
 use crate::{
     command::Command,
-    config::{CommandType, SystemctlBotConfig},
+    config::{CommandType, CommandUnits},
     systemd::Systemd,
 };
 
-pub struct CommandHandler {
-    pub config: Arc<SystemctlBotConfig>,
-    pub systemd: Arc<Systemd>,
+pub struct CommandHandler<'a> {
+    pub command_type: CommandType,
+    pub systemd: &'a Systemd,
+    pub units: &'a CommandUnits,
 }
 
-impl CommandHandler {
+impl CommandHandler<'_> {
     async fn handle_interaction(&self, http: &Http, interaction: Interaction) {
         let Interaction::Command(interaction) = interaction else {
             eprintln!("Unexpected interaction type {:?}", interaction.kind());
@@ -26,7 +27,7 @@ impl CommandHandler {
         };
 
         let command_and_unit: Result<(Command, &str), String> = (|| {
-            let (name, options) = match self.config.command_type {
+            let (name, options) = match self.command_type {
                 CommandType::Single => {
                     let sub = interaction
                         .data
@@ -46,7 +47,7 @@ impl CommandHandler {
             else {
                 return Err("Unable to get unit".into());
             };
-            if !self.config.units.command_units[&command].contains(unit) {
+            if !self.units[&command].contains(unit) {
                 return Err(format!(
                     "User {} attempted to call {} {}",
                     interaction.user.name, command, unit
@@ -96,7 +97,7 @@ impl CommandHandler {
 }
 
 #[async_trait]
-impl EventHandler for CommandHandler {
+impl EventHandler for CommandHandler<'_> {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         self.handle_interaction(ctx.http(), interaction).await
     }
