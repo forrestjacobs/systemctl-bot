@@ -12,6 +12,20 @@ pub enum Command {
     Restart,
 }
 
+impl Command {
+    pub const VALUES: [Self; 3] = [Self::Start, Self::Stop, Self::Restart];
+}
+
+impl Display for Command {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Start => write!(f, "start"),
+            Self::Stop => write!(f, "stop"),
+            Self::Restart => write!(f, "restart"),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum CommandRunnerError {
     SystemdError(SystemdRunError),

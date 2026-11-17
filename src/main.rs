@@ -1,5 +1,5 @@
-mod builder;
 mod command;
+mod command_builder;
 mod config;
 mod handler;
 mod parser;
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use serenity::all::{Client, GatewayIntents};
 
 use crate::{
-    builder::CommandBuilder, command::CommandRunner, handler::Handler, parser::Parser,
+    command::CommandRunner, command_builder::CommandBuilder, handler::Handler, parser::Parser,
     status_handler::StatusHandler, systemd::Systemd,
 };
 
