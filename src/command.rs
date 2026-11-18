@@ -1,10 +1,14 @@
-use std::{
+use core::{
     error::Error,
     fmt::{self, Display, Formatter},
     str::FromStr,
 };
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[expect(
+    clippy::arbitrary_source_item_ordering,
+    reason = "Commands are intentionally ordered"
+)]
 pub enum Command {
     Start,
     Stop,
@@ -28,19 +32,19 @@ impl Error for UnexpectedCommandError {}
 
 impl FromStr for Command {
     type Err = UnexpectedCommandError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
+    fn from_str(str: &str) -> Result<Self, Self::Err> {
+        match str {
             "start" => Ok(Self::Start),
             "stop" => Ok(Self::Stop),
             "restart" => Ok(Self::Restart),
-            v => Err(UnexpectedCommandError(v.to_string())),
+            str => Err(UnexpectedCommandError(str.to_owned())),
         }
     }
 }
 
 impl Display for Command {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
+        match *self {
             Self::Start => write!(f, "start"),
             Self::Stop => write!(f, "stop"),
             Self::Restart => write!(f, "restart"),
@@ -55,7 +59,7 @@ mod tests {
     #[test]
     fn display_unexpected_command_error() {
         assert_eq!(
-            UnexpectedCommandError("recombobulate".to_string()).to_string(),
+            UnexpectedCommandError("recombobulate".to_owned()).to_string(),
             "Unexpected command recombobulate"
         );
     }
@@ -67,7 +71,7 @@ mod tests {
         assert_eq!(Command::from_str("restart"), Ok(Command::Restart));
         assert_eq!(
             Command::from_str("recombobulate"),
-            Err(UnexpectedCommandError("recombobulate".to_string()))
+            Err(UnexpectedCommandError("recombobulate".to_owned()))
         );
     }
 

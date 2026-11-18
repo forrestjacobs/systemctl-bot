@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use core::str::FromStr as _;
 
 use mockall::automock;
 use serenity::all::{
@@ -17,31 +17,24 @@ use crate::{
 #[async_trait]
 #[automock]
 trait ResponseHandler {
-    async fn create_response(
-        &self,
-        interaction: &CommandInteraction,
-        builder: CreateInteractionResponse,
-    ) -> serenity::Result<()>;
     async fn create_followup(
         &self,
         interaction: &CommandInteraction,
         builder: CreateInteractionResponseFollowup,
     ) -> serenity::Result<Message>;
-}
-
-struct ResponseHandlerImpl<'a> {
-    http: &'a Http,
-}
-
-#[async_trait]
-impl ResponseHandler for ResponseHandlerImpl<'_> {
     async fn create_response(
         &self,
         interaction: &CommandInteraction,
         builder: CreateInteractionResponse,
-    ) -> serenity::Result<()> {
-        interaction.create_response(&self.http, builder).await
-    }
+    ) -> serenity::Result<()>;
+}
+
+struct ResponseHandlerImpl<'http> {
+    http: &'http Http,
+}
+
+#[async_trait]
+impl ResponseHandler for ResponseHandlerImpl<'_> {
     async fn create_followup(
         &self,
         interaction: &CommandInteraction,
@@ -49,22 +42,33 @@ impl ResponseHandler for ResponseHandlerImpl<'_> {
     ) -> serenity::Result<Message> {
         interaction.create_followup(&self.http, builder).await
     }
+    async fn create_response(
+        &self,
+        interaction: &CommandInteraction,
+        builder: CreateInteractionResponse,
+    ) -> serenity::Result<()> {
+        interaction.create_response(&self.http, builder).await
+    }
 }
 
-pub struct CommandHandler<'a, S: Systemd> {
+pub struct CommandHandler<'handler, S: Systemd> {
     pub command_type: CommandType,
-    pub systemd: &'a S,
-    pub units: &'a CommandUnits,
+    pub systemd: &'handler S,
+    pub units: &'handler CommandUnits,
 }
 
 impl<S: Systemd> CommandHandler<'_, S> {
-    async fn handle_interaction<R: ResponseHandler>(
-        &self,
-        responder: &R,
-        interaction: Interaction,
-    ) {
+    #[expect(
+        clippy::print_stderr,
+        reason = "Failed interaction handling should just be logged"
+    )]
+    async fn handle_interaction<R>(&self, responder: &R, interaction: Interaction)
+    where
+        R: ResponseHandler,
+    {
         let Interaction::Command(interaction) = interaction else {
-            eprintln!("Unexpected interaction type {:?}", interaction.kind());
+            let kind: u8 = interaction.kind().into();
+            eprintln!("Unexpected interaction type {kind}. See https://docs.discord.com/developers/interactions/receiving-and-responding#interaction-object-interaction-type");
             return;
         };
 
@@ -75,17 +79,17 @@ impl<S: Systemd> CommandHandler<'_, S> {
                         .data
                         .options
                         .first()
-                        .ok_or("Unable to get subcommand options".to_string())?;
-                    let CommandDataOptionValue::SubCommand(opts) = &sub.value else {
+                        .ok_or("Unable to get subcommand options".to_owned())?;
+                    let CommandDataOptionValue::SubCommand(ref opts) = sub.value else {
                         return Err("Unable to get subcommand".into());
                     };
                     (&sub.name, opts)
                 }
                 CommandType::Multiple => (&interaction.data.name, &interaction.data.options),
             };
-            let command = Command::from_str(name).map_err(|e| e.to_string())?;
-            let CommandDataOptionValue::String(unit) =
-                &options.first().ok_or("Unable to get option")?.value
+            let command = Command::from_str(name).map_err(|error| error.to_string())?;
+            let CommandDataOptionValue::String(ref unit) =
+                options.first().ok_or("Unable to get option")?.value
             else {
                 return Err("Unable to get unit".into());
             };
@@ -99,13 +103,14 @@ impl<S: Systemd> CommandHandler<'_, S> {
         })();
 
         let (command, unit) = match command_and_unit {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("{e}");
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("{error}");
                 let message = CreateInteractionResponseMessage::new().content("Invalid command");
                 let message = CreateInteractionResponse::Message(message);
-                if let Err(error) = responder.create_response(&interaction, message).await {
-                    eprintln!("Error responding: {error}");
+                if let Err(response_error) = responder.create_response(&interaction, message).await
+                {
+                    eprintln!("Error responding: {response_error}");
                 }
                 return;
             }
@@ -133,7 +138,7 @@ impl<S: Systemd> CommandHandler<'_, S> {
         }
         .await;
         if let Err(error) = result {
-            eprint!("Error handling interaction: {error}");
+            eprintln!("Error handling interaction: {error}");
         }
     }
 }
@@ -167,18 +172,18 @@ mod tests {
             (
                 Command::Start,
                 vec![
-                    "startable.service".to_string(),
-                    "restartable.service".to_string(),
+                    "startable.service".to_owned(),
+                    "restartable.service".to_owned(),
                 ],
             ),
             (
                 Command::Stop,
                 vec![
-                    "stoppable.service".to_string(),
-                    "restartable.service".to_string(),
+                    "stoppable.service".to_owned(),
+                    "restartable.service".to_owned(),
                 ],
             ),
-            (Command::Restart, vec!["restartable.service".to_string()]),
+            (Command::Restart, vec!["restartable.service".to_owned()]),
         ])
     }
 
@@ -196,10 +201,10 @@ mod tests {
             &responder,
             from_value(json!({
                 "type": InteractionType::Ping,
-                "id": 1,
-                "application_id": 1,
+                "id": 1_i32,
+                "application_id": 1_i32,
                 "token": "",
-                "version": 1,
+                "version": 1_i32,
             }))
             .unwrap(),
         )
@@ -235,9 +240,10 @@ mod tests {
         responder
             .expect_create_response()
             .with(
-                function(|i: &CommandInteraction| i.id.get() == 1),
-                function(|m| {
-                    to_value(m).unwrap()["data"]["content"].as_str() == Some("Invalid command")
+                function(|interaction: &CommandInteraction| interaction.id.get() == 1),
+                function(|builder| {
+                    to_value(builder).unwrap()["data"]["content"].as_str()
+                        == Some("Invalid command")
                 }),
             )
             .returning(|_, _| Box::pin(async { Ok(()) }));
@@ -247,7 +253,7 @@ mod tests {
                 &responder,
                 make_command_interaction(&json!({
                     "type": SerenityCommandType::ChatInput,
-                    "id": 1,
+                    "id": 1_i32,
                     "name": "systemctl",
                     // No options
                 })),
@@ -259,7 +265,7 @@ mod tests {
                 &responder,
                 make_command_interaction(&json!({
                     "type": SerenityCommandType::ChatInput,
-                    "id": 1,
+                    "id": 1_i32,
                     "name": "systemctl",
                     "options": [{
                         "type": CommandOptionType::String,
@@ -277,13 +283,13 @@ mod tests {
                 &responder,
                 make_command_interaction(&json!({
                     "type": SerenityCommandType::ChatInput,
-                    "id": 1,
+                    "id": 1_i32,
                     "name": "start",
                     "options": [{
                         // Bad option type
                         "type": CommandOptionType::Integer,
                         "name": "unit",
-                        "value": 1,
+                        "value": 1_i32,
                     }],
                 })),
             )
@@ -293,7 +299,7 @@ mod tests {
                 &responder,
                 make_command_interaction(&json!({
                     "type": SerenityCommandType::ChatInput,
-                    "id": 1,
+                    "id": 1_i32,
                     // Bad command name
                     "name": "recombobulate",
                     "options": [{
@@ -309,7 +315,7 @@ mod tests {
                 &responder,
                 make_command_interaction(&json!({
                     "type": SerenityCommandType::ChatInput,
-                    "id": 1,
+                    "id": 1_i32,
                     "name": "start",
                     "options": [{
                         "type": CommandOptionType::String,
@@ -333,16 +339,17 @@ mod tests {
         responder
             .expect_create_response()
             .with(
-                function(|i: &CommandInteraction| i.id.get() == 1),
-                function(|m| to_value(m).unwrap()["type"].as_i64() == Some(5)),
+                function(|interaction: &CommandInteraction| interaction.id.get() == 1),
+                function(|builder| to_value(builder).unwrap()["type"].as_i64() == Some(5)),
             )
             .returning(|_, _| Box::pin(async { Ok(()) }));
         responder
             .expect_create_followup()
             .with(
-                function(|i: &CommandInteraction| i.id.get() == 1),
-                function(|m| {
-                    to_value(m).unwrap()["content"].as_str() == Some("Started startable.service")
+                function(|interaction: &CommandInteraction| interaction.id.get() == 1),
+                function(|builder| {
+                    to_value(builder).unwrap()["content"].as_str()
+                        == Some("Started startable.service")
                 }),
             )
             .returning(|_, _| Box::pin(async { Err(serenity::Error::Other("test")) }));
@@ -356,7 +363,7 @@ mod tests {
             &responder,
             make_command_interaction(&json!({
                 "type": SerenityCommandType::ChatInput,
-                "id": 1,
+                "id": 1_i32,
                 "name": "systemctl",
                 "options": [{
                     "type": CommandOptionType::SubCommand,

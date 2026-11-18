@@ -7,6 +7,10 @@ use crate::command::Command;
 
 #[derive(Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[expect(
+    clippy::arbitrary_source_item_ordering,
+    reason = "Permissions are intentionally ordered"
+)]
 enum UnitPermission {
     Start,
     Stop,
@@ -16,9 +20,9 @@ enum UnitPermission {
 #[derive(Clone, Debug, Default, Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CommandType {
+    Multiple,
     #[default]
     Single,
-    Multiple,
 }
 
 #[derive(Deserialize)]
@@ -39,12 +43,19 @@ pub struct UnitCollection {
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 pub struct SystemctlBotConfig {
     pub application_id: ApplicationId,
-    pub discord_token: String,
-    pub guild_id: GuildId,
     #[serde(default)]
     pub command_type: CommandType,
+    pub discord_token: String,
+    pub guild_id: GuildId,
     #[serde(deserialize_with = "deserialize_units")]
     pub units: UnitCollection,
+}
+
+#[derive(Parser, Debug)]
+#[clap(version, about, long_about = None)]
+struct Args {
+    #[clap(short, long, default_value = "/etc/systemctl-bot.toml")]
+    config: String,
 }
 
 fn deserialize_unit_name<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -62,8 +73,8 @@ fn get_units_with_perms<const N: usize>(units: &[Unit], perms: [UnitPermission; 
     let perms = HashSet::from(perms);
     units
         .iter()
-        .filter(|u| perms.is_subset(&u.permissions))
-        .map(|u| u.name.clone())
+        .filter(|unit| perms.is_subset(&unit.permissions))
+        .map(|unit| unit.name.clone())
         .collect()
 }
 
@@ -89,13 +100,6 @@ where
         ]),
         status_units: get_units_with_perms(&units, [UnitPermission::Status]),
     })
-}
-
-#[derive(Parser, Debug)]
-#[clap(version, about, long_about = None)]
-struct Args {
-    #[clap(short, long, default_value = "/etc/systemctl-bot.toml")]
-    config: String,
 }
 
 pub fn build() -> SystemctlBotConfig {
@@ -141,15 +145,15 @@ mod tests {
             SystemctlBotConfig {
                 application_id: ApplicationId::new(88_888_888),
                 guild_id: GuildId::new(12_345_678),
-                discord_token: "88888888.88888888.88888888".to_string(),
+                discord_token: "88888888.88888888.88888888".to_owned(),
                 command_type: CommandType::Single,
                 units: UnitCollection {
                     command_units: HashMap::from([
-                        (Command::Start, vec!["restartable.service".to_string()]),
-                        (Command::Stop, vec!["restartable.service".to_string()]),
-                        (Command::Restart, vec!["restartable.service".to_string()]),
+                        (Command::Start, vec!["restartable.service".to_owned()]),
+                        (Command::Stop, vec!["restartable.service".to_owned()]),
+                        (Command::Restart, vec!["restartable.service".to_owned()]),
                     ]),
-                    status_units: vec!["reportable.service".to_string()],
+                    status_units: vec!["reportable.service".to_owned()],
                 }
             }
         );

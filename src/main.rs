@@ -1,3 +1,10 @@
+mod command;
+mod command_builder;
+mod command_handler;
+mod config;
+mod status_handler;
+mod systemd;
+
 use serenity::all::{Client, ClientBuilder, GatewayIntents};
 
 use crate::{
@@ -8,17 +15,10 @@ use crate::{
     systemd::{Systemd, SystemdImpl},
 };
 
-mod command;
-mod command_builder;
-mod command_handler;
-mod config;
-mod status_handler;
-mod systemd;
-
-fn make_builder<S: Systemd + Sync>(
-    config: SystemctlBotConfig,
-    systemd: &'static S,
-) -> ClientBuilder {
+fn make_builder<S>(config: SystemctlBotConfig, systemd: &'static S) -> ClientBuilder
+where
+    S: Systemd + Sync,
+{
     let mut builder = Client::builder(
         config.discord_token,
         GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES,
@@ -65,8 +65,9 @@ async fn main() {
 
 #[cfg(test)]
 mod tests {
+    use core::mem::transmute;
+    use core::ptr;
     use std::collections::HashMap;
-    use std::mem::transmute;
 
     use serenity::all::{ApplicationId, GuildId};
 
@@ -82,17 +83,17 @@ mod tests {
     fn basic_builder() {
         let units = UnitCollection {
             command_units: HashMap::from([
-                (Command::Start, vec!["restartable.service".to_string()]),
-                (Command::Stop, vec!["restartable.service".to_string()]),
-                (Command::Restart, vec!["restartable.service".to_string()]),
+                (Command::Start, vec!["restartable.service".to_owned()]),
+                (Command::Stop, vec!["restartable.service".to_owned()]),
+                (Command::Restart, vec!["restartable.service".to_owned()]),
             ]),
-            status_units: vec!["reportable.service".to_string()],
+            status_units: vec!["reportable.service".to_owned()],
         };
 
         let config = SystemctlBotConfig {
             application_id: ApplicationId::new(88_888_888),
             guild_id: GuildId::new(12_345_678),
-            discord_token: "88888888.88888888.88888888".to_string(),
+            discord_token: "88888888.88888888.88888888".to_owned(),
             command_type: CommandType::Single,
             units: units.clone(),
         };
@@ -107,15 +108,17 @@ mod tests {
         let handler = builder.get_event_handlers();
         assert_eq!(handler.len(), 2);
 
+        // SAFETY: The test should panic if this is wrong
         let (command_handler, _): (&CommandHandler<MockSystemd>, *const ()) =
             unsafe { transmute(handler[0].as_ref()) };
         assert_eq!(command_handler.command_type, CommandType::Single);
-        assert!(std::ptr::eq(command_handler.systemd, systemd));
+        assert!(ptr::eq(command_handler.systemd, systemd));
         assert_eq!(command_handler.units, &units.command_units);
 
+        // SAFETY: The test should panic if this is wrong
         let (status_handler, _): (&StatusHandler<MockSystemd>, *const ()) =
             unsafe { transmute(handler[1].as_ref()) };
-        assert!(std::ptr::eq(status_handler.systemd, systemd));
+        assert!(ptr::eq(status_handler.systemd, systemd));
         assert_eq!(status_handler.units, units.status_units);
     }
 }

@@ -1,15 +1,16 @@
-use std::{collections::HashMap, pin::Pin};
+use core::pin::Pin;
+use std::collections::HashMap;
 
 use futures::future::{join_all, ready};
-use futures::{Stream, StreamExt};
+use futures::{Stream, StreamExt as _};
 use serenity::all::{ActivityData, Context, EventHandler, Ready};
 use serenity::async_trait;
 use tokio_stream::StreamMap;
 
 use crate::systemd::Systemd;
 
-pub struct StatusHandler<'a, S: Systemd> {
-    pub systemd: &'a S,
+pub struct StatusHandler<'handler, S: Systemd> {
+    pub systemd: &'handler S,
     pub units: Vec<String>,
 }
 
@@ -22,16 +23,20 @@ impl<S: Systemd> StatusHandler<'_, S> {
                 join_all(
                     self.units
                         .iter()
-                        .map(|u| self.systemd.active_state_stream(u)),
+                        .map(|unit| self.systemd.active_state_stream(unit)),
                 )
                 .await,
             ),
         );
 
         let mut is_active_by_unit = HashMap::new();
-        Box::pin(streams.filter_map(move |(unit, status)| {
-            let is_active = status.is_ok_and(|v| v == "active");
-            if is_active_by_unit.insert(unit, is_active).unwrap_or(false) == is_active {
+        Box::pin(streams.filter_map(move |(event_unit, status)| {
+            let is_active = status.is_ok_and(|value| value == "active");
+            if is_active_by_unit
+                .insert(event_unit, is_active)
+                .unwrap_or(false)
+                == is_active
+            {
                 return ready(None);
             }
 
@@ -78,13 +83,13 @@ mod tests {
         provider
             .expect_active_state_stream()
             .returning(move |unit| {
-                let unit = unit.to_string();
+                let unit = unit.to_owned();
                 let mut rx = active_rx.resubscribe();
                 Box::pin(async move {
                     let stream: Pin<Box<StatusStream>> = Box::pin(stream! {
                         while let Ok((target, status)) = rx.recv().await {
                             if target == unit {
-                                yield Ok(status.to_string())
+                                yield Ok(status.to_owned())
                             }
                         }
                     });
@@ -93,7 +98,7 @@ mod tests {
             });
         let handler = StatusHandler {
             systemd: &provider,
-            units: vec!["a".to_string(), "b".to_string()],
+            units: vec!["a".to_owned(), "b".to_owned()],
         };
 
         let mut stream = handler.activity_stream().await;

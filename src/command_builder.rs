@@ -8,6 +8,22 @@ use crate::{
     config::{CommandType, CommandUnits},
 };
 
+pub struct CommandBuilder {
+    pub command_type: CommandType,
+    pub guild_id: GuildId,
+    pub units: &'static CommandUnits,
+}
+
+#[async_trait]
+impl EventHandler for CommandBuilder {
+    async fn ready(&self, ctx: Context, _data_about_bot: Ready) {
+        self.guild_id
+            .set_commands(&ctx.http, build_commands(&self.command_type, self.units))
+            .await
+            .expect("Unable to set commands");
+    }
+}
+
 fn build_commands(command_type: &CommandType, units: &CommandUnits) -> Vec<CreateCommand> {
     let command_iter = Command::VALUES
         .iter()
@@ -16,8 +32,12 @@ fn build_commands(command_type: &CommandType, units: &CommandUnits) -> Vec<Creat
             let name = command.to_string();
 
             let description = {
-                let mut capitalized_name = name.clone();
-                capitalized_name[0..1].make_ascii_uppercase();
+                let mut capitalized_name = String::new();
+                let mut chars = name.chars();
+                if let Some(char) = chars.next() {
+                    capitalized_name.push_str(&char.to_uppercase().to_string());
+                    capitalized_name.push_str(chars.as_str());
+                }
                 format!("{capitalized_name} units")
             };
 
@@ -37,7 +57,7 @@ fn build_commands(command_type: &CommandType, units: &CommandUnits) -> Vec<Creat
             (name, description, option)
         });
 
-    match &command_type {
+    match *command_type {
         CommandType::Single => {
             let options = command_iter
                 .map(|(name, description, option)| {
@@ -60,22 +80,6 @@ fn build_commands(command_type: &CommandType, units: &CommandUnits) -> Vec<Creat
     }
 }
 
-pub struct CommandBuilder {
-    pub command_type: CommandType,
-    pub guild_id: GuildId,
-    pub units: &'static CommandUnits,
-}
-
-#[async_trait]
-impl EventHandler for CommandBuilder {
-    async fn ready(&self, ctx: Context, _data_about_bot: Ready) {
-        self.guild_id
-            .set_commands(&ctx.http, build_commands(&self.command_type, self.units))
-            .await
-            .expect("Unable to set commands");
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -89,18 +93,18 @@ mod tests {
             (
                 Command::Start,
                 vec![
-                    "startable.service".to_string(),
-                    "restartable.service".to_string(),
+                    "startable.service".to_owned(),
+                    "restartable.service".to_owned(),
                 ],
             ),
             (
                 Command::Stop,
                 vec![
-                    "stoppable.service".to_string(),
-                    "restartable.service".to_string(),
+                    "stoppable.service".to_owned(),
+                    "restartable.service".to_owned(),
                 ],
             ),
-            (Command::Restart, vec!["restartable.service".to_string()]),
+            (Command::Restart, vec!["restartable.service".to_owned()]),
         ])
     }
 

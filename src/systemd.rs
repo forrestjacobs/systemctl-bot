@@ -1,9 +1,9 @@
-use futures::{Stream, StreamExt};
+use core::error::Error;
+use core::fmt::{self, Display, Formatter};
+use core::pin::Pin;
+use futures::{Stream, StreamExt as _};
 use mockall::automock;
 use serenity::async_trait;
-use std::error::Error;
-use std::fmt::{self, Display, Formatter};
-use std::pin::Pin;
 use zbus_systemd::systemd1::{JobRemoved, UnitProxy};
 use zbus_systemd::zbus::OwnedObjectPath;
 use zbus_systemd::{
@@ -15,17 +15,19 @@ use crate::command::Command;
 
 #[derive(Debug)]
 pub enum SystemdRunError {
-    UnexpectedJobResult(String),
     JobStreamClosed,
+    UnexpectedJobResult(String),
     ZbusError(zbus::Error),
 }
 
 impl Display for SystemdRunError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            SystemdRunError::UnexpectedJobResult(r) => write!(f, "Unexpected job result {r}"),
+        match *self {
             SystemdRunError::JobStreamClosed => write!(f, "Job stream closed"),
-            SystemdRunError::ZbusError(e) => write!(f, "{e}"),
+            SystemdRunError::UnexpectedJobResult(ref result) => {
+                write!(f, "Unexpected job result {result}")
+            }
+            SystemdRunError::ZbusError(ref err) => write!(f, "{err}"),
         }
     }
 }
@@ -38,51 +40,9 @@ impl From<zbus::Error> for SystemdRunError {
 
 impl Error for SystemdRunError {}
 
-async fn run_internal(
-    client: &ManagerProxy<'static>,
-    command: &Command,
-    unit: &str,
-) -> zbus::Result<OwnedObjectPath> {
-    let unit = unit.to_string();
-    let mode = "replace".to_string();
-    match command {
-        Command::Start => client.start_unit(unit, mode).await,
-        Command::Stop => client.stop_unit(unit, mode).await,
-        Command::Restart => client.restart_unit(unit, mode).await,
-    }
-}
-
-async fn wait_for_job<S: Stream<Item = JobRemoved>>(
-    mut job_stream: Pin<Box<S>>,
-    path: OwnedObjectPath,
-) -> Result<(), SystemdRunError> {
-    while let Some(event) = job_stream.next().await {
-        let args = event.args()?;
-        if args.job == path {
-            return match args.result.as_str() {
-                "done" => Ok(()),
-                result => Err(SystemdRunError::UnexpectedJobResult(result.to_string())),
-            };
-        }
-    }
-    Err(SystemdRunError::JobStreamClosed)
-}
-
-async fn active_state_stream_internal(
-    conn: &Connection,
-    client: &ManagerProxy<'static>,
-    unit: String,
-) -> Pin<Box<StatusStream>> {
-    let path = client.load_unit(unit).await.expect("Unable to load unit");
-    let builder = UnitProxy::builder(conn).path(path);
-    let builder = builder.build().await.expect("Unable to proxy unit");
-    let stream = builder.receive_active_state_changed().await;
-    Box::pin(stream.then(async |e| e.get().await))
-}
-
 pub struct SystemdImpl {
-    conn: Connection,
     client: ManagerProxy<'static>,
+    conn: Connection,
 }
 
 impl SystemdImpl {
@@ -104,21 +64,66 @@ pub type StatusStream = dyn Stream<Item = zbus::Result<String>> + Send;
 #[async_trait]
 #[automock]
 pub trait Systemd {
-    async fn run(&self, command: &Command, unit: &str) -> Result<(), SystemdRunError>;
     async fn active_state_stream(&self, unit: &str) -> Pin<Box<StatusStream>>;
+    async fn run(&self, command: &Command, unit: &str) -> Result<(), SystemdRunError>;
 }
 
 #[async_trait]
 impl Systemd for SystemdImpl {
+    async fn active_state_stream(&self, unit: &str) -> Pin<Box<StatusStream>> {
+        active_state_stream_internal(&self.conn, &self.client, unit.to_owned()).await
+    }
+
     async fn run(&self, command: &Command, unit: &str) -> Result<(), SystemdRunError> {
         let job_stream = self.client.receive_job_removed().await?;
         let path = run_internal(&self.client, command, unit).await?;
         wait_for_job(Box::pin(job_stream), path).await
     }
+}
 
-    async fn active_state_stream(&self, unit: &str) -> Pin<Box<StatusStream>> {
-        active_state_stream_internal(&self.conn, &self.client, unit.to_string()).await
+async fn run_internal(
+    client: &ManagerProxy<'static>,
+    command: &Command,
+    unit: &str,
+) -> zbus::Result<OwnedObjectPath> {
+    let unit = unit.to_owned();
+    let mode = "replace".to_owned();
+    match *command {
+        Command::Start => client.start_unit(unit, mode).await,
+        Command::Stop => client.stop_unit(unit, mode).await,
+        Command::Restart => client.restart_unit(unit, mode).await,
     }
+}
+
+async fn wait_for_job<S>(
+    mut job_stream: Pin<Box<S>>,
+    path: OwnedObjectPath,
+) -> Result<(), SystemdRunError>
+where
+    S: Stream<Item = JobRemoved>,
+{
+    while let Some(event) = job_stream.next().await {
+        let args = event.args()?;
+        if args.job == path {
+            return match args.result.as_str() {
+                "done" => Ok(()),
+                result => Err(SystemdRunError::UnexpectedJobResult(result.to_owned())),
+            };
+        }
+    }
+    Err(SystemdRunError::JobStreamClosed)
+}
+
+async fn active_state_stream_internal(
+    conn: &Connection,
+    client: &ManagerProxy<'static>,
+    unit: String,
+) -> Pin<Box<StatusStream>> {
+    let path = client.load_unit(unit).await.expect("Unable to load unit");
+    let builder = UnitProxy::builder(conn).path(path);
+    let builder = builder.build().await.expect("Unable to proxy unit");
+    let stream = builder.receive_active_state_changed().await;
+    Box::pin(stream.then(async |event| event.get().await))
 }
 
 #[cfg(test)]
@@ -139,15 +144,15 @@ mod tests {
         .build(&(
             0_u32, // This should match the number in the path, but in practice we don't use this arg
             path.clone(),
-            "demo.service".to_string(),
-            result.to_string(),
+            "demo.service".to_owned(),
+            result.to_owned(),
         ))
     }
 
     #[test]
     fn display_systemd_run_errors() {
         assert_eq!(
-            SystemdRunError::UnexpectedJobResult("weird".to_string()).to_string(),
+            SystemdRunError::UnexpectedJobResult("weird".to_owned()).to_string(),
             "Unexpected job result weird"
         );
         assert_eq!(
