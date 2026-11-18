@@ -106,18 +106,25 @@ mod tests {
         );
 
         let handler = builder.get_event_handlers();
-        assert_eq!(handler.len(), 2);
+        assert_eq!(handler.len(), 3);
+
+        // SAFETY: The test should panic if this is wrong
+        let (command_builder, _): (&CommandBuilder, *const ()) =
+            unsafe { transmute(handler[0].as_ref()) };
+        assert_eq!(command_builder.command_type, CommandType::Single);
+        assert_eq!(command_builder.guild_id, GuildId::new(12_345_678));
+        assert_eq!(command_builder.units, &units.command_units);
 
         // SAFETY: The test should panic if this is wrong
         let (command_handler, _): (&CommandHandler<MockSystemd>, *const ()) =
-            unsafe { transmute(handler[0].as_ref()) };
+            unsafe { transmute(handler[1].as_ref()) };
         assert_eq!(command_handler.command_type, CommandType::Single);
         assert!(ptr::eq(command_handler.systemd, systemd));
         assert_eq!(command_handler.units, &units.command_units);
 
         // SAFETY: The test should panic if this is wrong
         let (status_handler, _): (&StatusHandler<MockSystemd>, *const ()) =
-            unsafe { transmute(handler[1].as_ref()) };
+            unsafe { transmute(handler[2].as_ref()) };
         assert!(ptr::eq(status_handler.systemd, systemd));
         assert_eq!(status_handler.units, units.status_units);
     }
