@@ -4,6 +4,7 @@ mod command_handler;
 mod config;
 mod status_handler;
 mod systemd;
+mod unit;
 
 use serenity::all::{Client, ClientBuilder, GatewayIntents};
 
@@ -13,6 +14,7 @@ use crate::{
     config::SystemctlBotConfig,
     status_handler::StatusHandler,
     systemd::{Systemd, SystemdImpl},
+    unit::{get_command_units, get_status_units},
 };
 
 fn make_builder<S>(config: SystemctlBotConfig, systemd: &'static S) -> ClientBuilder
@@ -25,8 +27,12 @@ where
     )
     .application_id(config.application_id);
 
-    let command_units = config.units.command_units;
-    if command_units.values().any(|units| !units.is_empty()) {
+    let units = Box::leak(Box::new(config.units));
+    let command_units = get_command_units(units);
+    if command_units
+        .values()
+        .any(|unit_list| !unit_list.is_empty())
+    {
         let command_units = Box::leak(Box::new(command_units));
         builder = builder
             .event_handler(CommandBuilder {
@@ -41,7 +47,7 @@ where
             });
     }
 
-    let status_units = config.units.status_units;
+    let status_units = get_status_units(units);
     if !status_units.is_empty() {
         builder = builder.event_handler(StatusHandler {
             systemd,
@@ -67,13 +73,13 @@ async fn main() {
 mod tests {
     use core::mem::transmute;
     use core::ptr;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     use serenity::all::{ApplicationId, GuildId};
 
     use crate::{
         command::Command,
-        config::{CommandType, UnitCollection},
+        config::{CommandType, Unit, UnitPermission},
         systemd::MockSystemd,
     };
 
@@ -81,21 +87,21 @@ mod tests {
 
     #[test]
     fn basic_builder() {
-        let units = UnitCollection {
-            command_units: HashMap::from([
-                (Command::Start, vec!["restartable.service".to_owned()]),
-                (Command::Stop, vec!["restartable.service".to_owned()]),
-                (Command::Restart, vec!["restartable.service".to_owned()]),
-            ]),
-            status_units: vec!["reportable.service".to_owned()],
-        };
-
         let config = SystemctlBotConfig {
             application_id: ApplicationId::new(88_888_888),
             guild_id: GuildId::new(12_345_678),
             discord_token: "88888888.88888888.88888888".to_owned(),
             command_type: CommandType::Single,
-            units: units.clone(),
+            units: vec![
+                Unit {
+                    name: "restartable.service".to_owned(),
+                    permissions: HashSet::from([UnitPermission::Start, UnitPermission::Stop]),
+                },
+                Unit {
+                    name: "reportable.service".to_owned(),
+                    permissions: HashSet::from([UnitPermission::Status]),
+                },
+            ],
         };
         let systemd = Box::leak(Box::new(MockSystemd::new()));
         let builder = make_builder(config, systemd);
@@ -108,24 +114,30 @@ mod tests {
         let handler = builder.get_event_handlers();
         assert_eq!(handler.len(), 3);
 
+        let command_units = HashMap::from([
+            (Command::Start, vec!["restartable.service"]),
+            (Command::Stop, vec!["restartable.service"]),
+            (Command::Restart, vec!["restartable.service"]),
+        ]);
+
         // SAFETY: The test should panic if this is wrong
         let (command_builder, _): (&CommandBuilder, *const ()) =
             unsafe { transmute(handler[0].as_ref()) };
         assert_eq!(command_builder.command_type, CommandType::Single);
         assert_eq!(command_builder.guild_id, GuildId::new(12_345_678));
-        assert_eq!(command_builder.units, &units.command_units);
+        assert_eq!(command_builder.units, &command_units);
 
         // SAFETY: The test should panic if this is wrong
         let (command_handler, _): (&CommandHandler<MockSystemd>, *const ()) =
             unsafe { transmute(handler[1].as_ref()) };
         assert_eq!(command_handler.command_type, CommandType::Single);
         assert!(ptr::eq(command_handler.systemd, systemd));
-        assert_eq!(command_handler.units, &units.command_units);
+        assert_eq!(command_handler.units, &command_units);
 
         // SAFETY: The test should panic if this is wrong
         let (status_handler, _): (&StatusHandler<MockSystemd>, *const ()) =
             unsafe { transmute(handler[2].as_ref()) };
         assert!(ptr::eq(status_handler.systemd, systemd));
-        assert_eq!(status_handler.units, units.status_units);
+        assert_eq!(status_handler.units, vec!["reportable.service"]);
     }
 }

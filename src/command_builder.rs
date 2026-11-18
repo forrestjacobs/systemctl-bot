@@ -3,15 +3,13 @@ use serenity::all::{
 };
 use serenity::async_trait;
 
-use crate::{
-    command::Command,
-    config::{CommandType, CommandUnits},
-};
+use crate::unit::CommandUnits;
+use crate::{command::Command, config::CommandType};
 
 pub struct CommandBuilder {
     pub command_type: CommandType,
     pub guild_id: GuildId,
-    pub units: &'static CommandUnits,
+    pub units: &'static CommandUnits<'static>,
 }
 
 #[async_trait]
@@ -48,7 +46,7 @@ fn build_commands(command_type: &CommandType, units: &CommandUnits) -> Vec<Creat
                     format!("The unit to {name}"),
                 )
                 .required(true);
-                units[command].iter().fold(base, |option, unit| {
+                units[command].iter().fold(base, |option, &unit| {
                     let alias = unit.strip_suffix(".service").unwrap_or(unit);
                     option.add_string_choice(alias, unit)
                 })
@@ -88,23 +86,17 @@ mod tests {
 
     use super::*;
 
-    fn units_fixture() -> CommandUnits {
+    fn units_fixture() -> CommandUnits<'static> {
         HashMap::from([
             (
                 Command::Start,
-                vec![
-                    "startable.service".to_owned(),
-                    "restartable.service".to_owned(),
-                ],
+                vec!["startable.service", "restartable.service"],
             ),
             (
                 Command::Stop,
-                vec![
-                    "stoppable.service".to_owned(),
-                    "restartable.service".to_owned(),
-                ],
+                vec!["stoppable.service", "restartable.service"],
             ),
-            (Command::Restart, vec!["restartable.service".to_owned()]),
+            (Command::Restart, vec!["restartable.service"]),
         ])
     }
 

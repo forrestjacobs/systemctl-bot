@@ -11,7 +11,7 @@ use crate::systemd::Systemd;
 
 pub struct StatusHandler<'handler, S: Systemd> {
     pub systemd: &'handler S,
-    pub units: Vec<String>,
+    pub units: Vec<&'handler str>,
 }
 
 impl<S: Systemd> StatusHandler<'_, S> {
@@ -44,7 +44,7 @@ impl<S: Systemd> StatusHandler<'_, S> {
                 .units
                 .iter()
                 .filter(|unit| is_active_by_unit.get(unit).copied().unwrap_or(false))
-                .map(String::as_str)
+                .copied()
                 .collect();
 
             ready(Some(if active_units.is_empty() {
@@ -98,7 +98,7 @@ mod tests {
             });
         let handler = StatusHandler {
             systemd: &provider,
-            units: vec!["a".to_owned(), "b".to_owned()],
+            units: vec!["a", "b"],
         };
 
         let mut stream = handler.activity_stream().await;

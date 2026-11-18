@@ -1,17 +1,15 @@
 use clap::Parser;
 use serde::{self, Deserialize, Deserializer};
 use serenity::all::{ApplicationId, GuildId};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use crate::command::Command;
-
-#[derive(Deserialize, Hash, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[expect(
     clippy::arbitrary_source_item_ordering,
     reason = "Permissions are intentionally ordered"
 )]
-enum UnitPermission {
+pub enum UnitPermission {
     Start,
     Stop,
     Status,
@@ -25,19 +23,11 @@ pub enum CommandType {
     Single,
 }
 
-#[derive(Deserialize)]
-struct Unit {
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+pub struct Unit {
     #[serde(deserialize_with = "deserialize_unit_name")]
-    name: String,
-    permissions: HashSet<UnitPermission>,
-}
-
-pub type CommandUnits = HashMap<Command, Vec<String>>;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct UnitCollection {
-    pub command_units: CommandUnits,
-    pub status_units: Vec<String>,
+    pub name: String,
+    pub permissions: HashSet<UnitPermission>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
@@ -47,8 +37,7 @@ pub struct SystemctlBotConfig {
     pub command_type: CommandType,
     pub discord_token: String,
     pub guild_id: GuildId,
-    #[serde(deserialize_with = "deserialize_units")]
-    pub units: UnitCollection,
+    pub units: Vec<Unit>,
 }
 
 #[derive(Parser, Debug)]
@@ -67,39 +56,6 @@ where
         name = format!("{name}.service");
     }
     Ok(name)
-}
-
-fn get_units_with_perms<const N: usize>(units: &[Unit], perms: [UnitPermission; N]) -> Vec<String> {
-    let perms = HashSet::from(perms);
-    units
-        .iter()
-        .filter(|unit| perms.is_subset(&unit.permissions))
-        .map(|unit| unit.name.clone())
-        .collect()
-}
-
-fn deserialize_units<'de, D>(deserializer: D) -> Result<UnitCollection, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let units: Vec<Unit> = Vec::deserialize(deserializer)?;
-    Ok(UnitCollection {
-        command_units: HashMap::from([
-            (
-                Command::Start,
-                get_units_with_perms(&units, [UnitPermission::Start]),
-            ),
-            (
-                Command::Stop,
-                get_units_with_perms(&units, [UnitPermission::Stop]),
-            ),
-            (
-                Command::Restart,
-                get_units_with_perms(&units, [UnitPermission::Start, UnitPermission::Stop]),
-            ),
-        ]),
-        status_units: get_units_with_perms(&units, [UnitPermission::Status]),
-    })
 }
 
 pub fn build() -> SystemctlBotConfig {
@@ -147,14 +103,16 @@ mod tests {
                 guild_id: GuildId::new(12_345_678),
                 discord_token: "88888888.88888888.88888888".to_owned(),
                 command_type: CommandType::Single,
-                units: UnitCollection {
-                    command_units: HashMap::from([
-                        (Command::Start, vec!["restartable.service".to_owned()]),
-                        (Command::Stop, vec!["restartable.service".to_owned()]),
-                        (Command::Restart, vec!["restartable.service".to_owned()]),
-                    ]),
-                    status_units: vec!["reportable.service".to_owned()],
-                }
+                units: vec![
+                    Unit {
+                        name: "restartable.service".to_owned(),
+                        permissions: HashSet::from([UnitPermission::Start, UnitPermission::Stop]),
+                    },
+                    Unit {
+                        name: "reportable.service".to_owned(),
+                        permissions: HashSet::from([UnitPermission::Status]),
+                    }
+                ]
             }
         );
     }

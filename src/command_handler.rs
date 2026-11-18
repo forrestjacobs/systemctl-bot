@@ -8,11 +8,8 @@ use serenity::all::{
 };
 use serenity::async_trait;
 
-use crate::{
-    command::Command,
-    config::{CommandType, CommandUnits},
-    systemd::Systemd,
-};
+use crate::unit::CommandUnits;
+use crate::{command::Command, config::CommandType, systemd::Systemd};
 
 #[async_trait]
 #[automock]
@@ -54,7 +51,7 @@ impl ResponseHandler for ResponseHandlerImpl<'_> {
 pub struct CommandHandler<'handler, S: Systemd> {
     pub command_type: CommandType,
     pub systemd: &'handler S,
-    pub units: &'handler CommandUnits,
+    pub units: &'handler CommandUnits<'handler>,
 }
 
 impl<S: Systemd> CommandHandler<'_, S> {
@@ -93,7 +90,7 @@ impl<S: Systemd> CommandHandler<'_, S> {
             else {
                 return Err("Unable to get unit".into());
             };
-            if !self.units[&command].contains(unit) {
+            if !self.units[&command].contains(&unit.as_str()) {
                 return Err(format!(
                     "User {} attempted to call {} {}",
                     interaction.user.name, command, unit
@@ -167,23 +164,17 @@ mod tests {
 
     use super::*;
 
-    fn units_fixture() -> CommandUnits {
+    fn units_fixture() -> CommandUnits<'static> {
         HashMap::from([
             (
                 Command::Start,
-                vec![
-                    "startable.service".to_owned(),
-                    "restartable.service".to_owned(),
-                ],
+                vec!["startable.service", "restartable.service"],
             ),
             (
                 Command::Stop,
-                vec![
-                    "stoppable.service".to_owned(),
-                    "restartable.service".to_owned(),
-                ],
+                vec!["stoppable.service", "restartable.service"],
             ),
-            (Command::Restart, vec!["restartable.service".to_owned()]),
+            (Command::Restart, vec!["restartable.service"]),
         ])
     }
 
