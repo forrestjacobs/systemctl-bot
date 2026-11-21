@@ -116,8 +116,7 @@ async fn active_state_stream_internal(
     unit: String,
 ) -> zbus::Result<Pin<Box<StatusStream>>> {
     let path = client.load_unit(unit).await?;
-    let builder = UnitProxy::builder(conn).path(path);
-    let builder = builder.build().await?;
+    let builder = UnitProxy::builder(conn).path(path).build().await?;
     let stream = builder.receive_active_state_changed().await;
     Ok(Box::pin(stream.then(async |event| event.get().await)))
 }

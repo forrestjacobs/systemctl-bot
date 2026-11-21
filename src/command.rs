@@ -37,7 +37,7 @@ impl FromStr for Command {
             "start" => Ok(Self::Start),
             "stop" => Ok(Self::Stop),
             "restart" => Ok(Self::Restart),
-            str => Err(UnexpectedCommandError(str.to_owned())),
+            _ => Err(UnexpectedCommandError(str.to_owned())),
         }
     }
 }
