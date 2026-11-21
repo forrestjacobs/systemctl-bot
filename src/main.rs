@@ -58,9 +58,14 @@ where
 }
 
 #[tokio::main]
+#[expect(clippy::expect_used, reason = "irrecoverable errors")]
 async fn main() {
-    let config = config::build();
-    let systemd = Box::leak(Box::new(SystemdImpl::new().await));
+    let config = config::build().expect("Unable to read config");
+    let systemd = Box::leak(Box::new(
+        SystemdImpl::new()
+            .await
+            .expect("Unable to connect to systemd"),
+    ));
     make_builder(config, systemd)
         .await
         .expect("Unable to build the Discord client")

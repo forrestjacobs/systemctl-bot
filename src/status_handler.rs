@@ -6,8 +6,9 @@ use futures::{Stream, StreamExt as _};
 use serenity::all::{ActivityData, Context, EventHandler, Ready};
 use serenity::async_trait;
 use tokio_stream::StreamMap;
+use zbus_systemd::zbus;
 
-use crate::systemd::Systemd;
+use crate::systemd::{StatusStream, Systemd};
 
 pub struct StatusHandler<'handler, S: Systemd> {
     pub systemd: &'handler S,
@@ -17,20 +18,19 @@ pub struct StatusHandler<'handler, S: Systemd> {
 impl<S: Systemd> StatusHandler<'_, S> {
     async fn activity_stream(
         &self,
-    ) -> Pin<Box<impl Stream<Item = Option<ActivityData>> + use<'_, S>>> {
-        let streams = StreamMap::from_iter(
-            self.units.iter().zip(
-                join_all(
-                    self.units
-                        .iter()
-                        .map(|unit| self.systemd.active_state_stream(unit)),
-                )
-                .await,
-            ),
-        );
+    ) -> zbus::Result<Pin<Box<impl Stream<Item = Option<ActivityData>> + use<'_, S>>>> {
+        let streams = self
+            .units
+            .iter()
+            .map(|unit| self.systemd.active_state_stream(unit));
+        let streams = join_all(streams)
+            .await
+            .into_iter()
+            .collect::<zbus::Result<Vec<Pin<Box<StatusStream>>>>>()?;
+        let streams = StreamMap::from_iter(self.units.iter().zip(streams));
 
         let mut is_active_by_unit = HashMap::new();
-        Box::pin(streams.filter_map(move |(event_unit, status)| {
+        Ok(Box::pin(streams.filter_map(move |(event_unit, status)| {
             let is_active = status.is_ok_and(|value| value == "active");
             if is_active_by_unit
                 .insert(event_unit, is_active)
@@ -52,14 +52,18 @@ impl<S: Systemd> StatusHandler<'_, S> {
             } else {
                 Some(ActivityData::playing(active_units.join(", ")))
             }))
-        }))
+        })))
     }
 }
 
 #[async_trait]
 impl<S: Systemd + Sync> EventHandler for StatusHandler<'_, S> {
+    #[expect(clippy::expect_used, reason = "irrecoverable errors")]
     async fn ready(&self, ctx: Context, _data_about_bot: Ready) {
-        let mut stream = self.activity_stream().await;
+        let mut stream = self
+            .activity_stream()
+            .await
+            .expect("Unable to build activity stream");
         while let Some(activity) = stream.next().await {
             ctx.set_activity(activity);
         }
@@ -93,7 +97,7 @@ mod tests {
                             }
                         }
                     });
-                    stream
+                    Ok(stream)
                 })
             });
         let handler = StatusHandler {
@@ -101,7 +105,7 @@ mod tests {
             units: vec!["a", "b"],
         };
 
-        let mut stream = handler.activity_stream().await;
+        let mut stream = handler.activity_stream().await.unwrap();
         active_tx.send(("a", "active")).unwrap();
         assert_eq!(stream.next().await, Some(Some(ActivityData::playing("a"))));
         active_tx.send(("b", "active")).unwrap();

@@ -14,6 +14,7 @@ pub struct CommandBuilder {
 
 #[async_trait]
 impl EventHandler for CommandBuilder {
+    #[expect(clippy::expect_used, reason = "irrecoverable errors")]
     async fn ready(&self, ctx: Context, _data_about_bot: Ready) {
         self.guild_id
             .set_commands(&ctx.http, build_commands(&self.command_type, self.units))

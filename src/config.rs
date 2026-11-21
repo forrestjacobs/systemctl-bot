@@ -112,12 +112,12 @@ fn deserialize(builder: ConfigBuilder<DefaultState>) -> Result<SystemctlBotConfi
     Ok(result)
 }
 
-pub fn build() -> SystemctlBotConfig {
+pub fn build() -> Result<SystemctlBotConfig, ConfigError> {
     let args = Args::parse();
     let builder = config::Config::builder()
         .add_source(config::File::with_name(&args.config))
         .add_source(config::Environment::with_prefix("SBOT"));
-    deserialize(builder).expect("Unable to read config")
+    deserialize(builder)
 }
 
 #[cfg(test)]

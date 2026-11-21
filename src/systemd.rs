@@ -46,16 +46,12 @@ pub struct SystemdImpl {
 }
 
 impl SystemdImpl {
-    pub async fn new() -> Self {
-        let conn = Connection::system()
-            .await
-            .expect("Unable to connect to systemd");
-        Self {
-            client: ManagerProxy::new(&conn)
-                .await
-                .expect("Unable to proxy systemd"),
+    pub async fn new() -> zbus::Result<Self> {
+        let conn = Connection::system().await?;
+        Ok(Self {
+            client: ManagerProxy::new(&conn).await?,
             conn,
-        }
+        })
     }
 }
 
@@ -64,13 +60,13 @@ pub type StatusStream = dyn Stream<Item = zbus::Result<String>> + Send;
 #[async_trait]
 #[automock]
 pub trait Systemd {
-    async fn active_state_stream(&self, unit: &str) -> Pin<Box<StatusStream>>;
+    async fn active_state_stream(&self, unit: &str) -> zbus::Result<Pin<Box<StatusStream>>>;
     async fn run(&self, command: &Command, unit: &str) -> Result<(), SystemdRunError>;
 }
 
 #[async_trait]
 impl Systemd for SystemdImpl {
-    async fn active_state_stream(&self, unit: &str) -> Pin<Box<StatusStream>> {
+    async fn active_state_stream(&self, unit: &str) -> zbus::Result<Pin<Box<StatusStream>>> {
         active_state_stream_internal(&self.conn, &self.client, unit.to_owned()).await
     }
 
@@ -118,12 +114,12 @@ async fn active_state_stream_internal(
     conn: &Connection,
     client: &ManagerProxy<'static>,
     unit: String,
-) -> Pin<Box<StatusStream>> {
-    let path = client.load_unit(unit).await.expect("Unable to load unit");
+) -> zbus::Result<Pin<Box<StatusStream>>> {
+    let path = client.load_unit(unit).await?;
     let builder = UnitProxy::builder(conn).path(path);
-    let builder = builder.build().await.expect("Unable to proxy unit");
+    let builder = builder.build().await?;
     let stream = builder.receive_active_state_changed().await;
-    Box::pin(stream.then(async |event| event.get().await))
+    Ok(Box::pin(stream.then(async |event| event.get().await)))
 }
 
 #[cfg(test)]

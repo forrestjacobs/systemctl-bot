@@ -44,7 +44,6 @@ pedantic = { level = "warn", priority = -1 }
 restriction = { level = "warn", priority = -1 }
 blanket_clippy_restriction_lints = "allow"
 
-expect_used = "allow"
 implicit_return = "allow"
 missing_docs_in_private_items = "allow"
 missing_trait_methods = "allow"
